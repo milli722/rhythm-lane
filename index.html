@@ -1,0 +1,1135 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rhythm Lane — 自動譜面節奏遊戲</title>
+<meta name="description" content="選一首歌，瀏覽器自動分析節奏生成譜面的四軌音樂節奏遊戲。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect x=%224%22 y=%2216%22 width=%224%22 height=%2212%22 rx=%222%22 fill=%22%233ef0ff%22/%3E%3Crect x=%2211%22 y=%228%22 width=%224%22 height=%2220%22 rx=%222%22 fill=%22%234d8bff%22/%3E%3Crect x=%2218%22 y=%224%22 width=%224%22 height=%2224%22 rx=%222%22 fill=%22%23a86bff%22/%3E%3Crect x=%2225%22 y=%2212%22 width=%224%22 height=%2216%22 rx=%222%22 fill=%22%23ff5ccf%22/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#06070c;--panel:rgba(13,17,30,.78);--panel2:rgba(22,28,48,.7);--line:rgba(130,165,255,.16);--line2:rgba(130,165,255,.3);
+  --text:#e9edf8;--muted:#8a93ad;--dim:#5b6380;
+  --c0:#3ef0ff;--c1:#4d8bff;--c2:#a86bff;--c3:#ff5ccf;--gold:#ffd166;--bad:#ff6b7d;
+  --disp:'Orbitron','Noto Sans TC',system-ui,sans-serif;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Noto Sans TC',system-ui,-apple-system,sans-serif;overflow:hidden;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer;border:none;background:none}
+input{font:inherit;color:inherit}
+kbd{display:inline-grid;place-items:center;min-width:1.9em;height:1.9em;padding:0 .4em;margin:0 .15em;border:1px solid var(--line2);border-bottom-width:3px;border-radius:6px;font-family:var(--disp);font-size:.8em;color:var(--c0);background:rgba(62,240,255,.06)}
+
+/* backdrop */
+.backdrop{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;
+  background:radial-gradient(ellipse 70% 50% at 50% 30%,rgba(77,139,255,.16),transparent 70%),radial-gradient(ellipse 50% 40% at 85% 95%,rgba(255,92,207,.12),transparent 70%),radial-gradient(ellipse 50% 40% at 10% 90%,rgba(62,240,255,.08),transparent 70%),var(--bg)}
+.backdrop .floor{position:absolute;left:-60%;right:-60%;bottom:-20%;height:72%;
+  background-image:linear-gradient(rgba(62,240,255,.22) 1px,transparent 1px),linear-gradient(90deg,rgba(77,139,255,.15) 1px,transparent 1px);
+  background-size:64px 64px;transform:perspective(420px) rotateX(64deg);transform-origin:50% 0;animation:floor 1.875s linear infinite;
+  -webkit-mask-image:linear-gradient(to bottom,transparent,#000 40%);mask-image:linear-gradient(to bottom,transparent,#000 40%)}
+@keyframes floor{to{background-position:0 64px,0 0}}
+body.playing .backdrop{display:none}
+
+#bgVideo{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;display:none;background:#000}
+#bgShade{position:fixed;inset:0;z-index:0;display:none;background:radial-gradient(ellipse at 50% 45%,rgba(0,0,0,.42),rgba(0,0,0,.68))}
+#cv{position:fixed;left:0;top:0;z-index:1;display:none}
+#ytWrap{position:fixed;z-index:6;display:none;background:#000;border-radius:12px;overflow:hidden;box-shadow:0 0 0 1px var(--line2),0 18px 50px rgba(0,0,0,.5)}
+#ytWrap.game{border-radius:0 0 14px 14px;box-shadow:0 0 0 1px rgba(62,240,255,.25),0 10px 60px rgba(62,240,255,.18)}
+#ytWrap iframe,#ytPlayer{width:100%;height:100%;display:block;border:0}
+
+.screen{position:fixed;inset:0;z-index:2;display:none;overflow-y:auto;overflow-x:hidden}
+.screen.active{display:block}
+#game{overflow:hidden}
+
+/* top bar */
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 28px;position:sticky;top:0;z-index:3;
+  background:linear-gradient(to bottom,rgba(6,7,12,.92),rgba(6,7,12,0))}
+.brand{font-family:var(--disp);font-weight:900;letter-spacing:.18em;font-size:15px;display:flex;align-items:center;gap:10px}
+.logo{width:22px;height:22px;position:relative}
+.logo i{position:absolute;bottom:0;width:4px;border-radius:2px}
+.logo i:nth-child(1){left:0;height:45%;background:var(--c0)}.logo i:nth-child(2){left:6px;height:80%;background:var(--c1)}
+.logo i:nth-child(3){left:12px;height:100%;background:var(--c2)}.logo i:nth-child(4){left:18px;height:60%;background:var(--c3)}
+.ghost{padding:9px 16px;border-radius:10px;border:1px solid var(--line);color:var(--muted);font-size:14px;transition:.2s;background:rgba(10,13,24,.5)}
+.ghost:hover{color:var(--text);border-color:var(--line2);background:rgba(30,38,64,.6)}
+.crumb{font-family:var(--disp);letter-spacing:.12em;font-size:14px;color:var(--muted)}
+
+/* home */
+.home{max-width:1120px;margin:0 auto;padding:4vh 28px 60px}
+.hero{text-align:center;margin-bottom:5vh}
+.hero h1{font-family:var(--disp);font-weight:900;font-size:clamp(48px,8vw,104px);line-height:.92;letter-spacing:.06em}
+.hero h1 span{background:linear-gradient(90deg,var(--c0),var(--c1) 35%,var(--c2) 65%,var(--c3));-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 30px rgba(120,120,255,.35))}
+.hero p{margin-top:22px;color:var(--muted);font-size:17px;line-height:1.9}
+.modes{display:grid;grid-template-columns:repeat(6,1fr);gap:16px}
+.mode{grid-column:span 2;text-align:left;padding:22px 22px 20px;border-radius:16px;border:1px solid var(--line);background:var(--panel);backdrop-filter:blur(10px);
+  transition:transform .2s,border-color .2s,box-shadow .2s;position:relative;overflow:hidden;min-height:176px;display:flex;flex-direction:column}
+.mode:nth-child(4),.mode:nth-child(5){grid-column:span 3}
+.mode::before{content:"";position:absolute;inset:0 0 auto;height:2px;background:var(--accent,var(--c0));opacity:.7}
+.mode:hover{transform:translateY(-3px);border-color:var(--line2);box-shadow:0 14px 40px rgba(0,0,0,.4),0 0 0 1px var(--accent,var(--c0)) inset}
+.mode .tag{font-size:11px;letter-spacing:.12em;color:var(--accent,var(--c0));font-weight:700}
+.mode h3{font-size:21px;margin:8px 0 8px;font-weight:700}
+.mode p{color:var(--muted);font-size:14px;line-height:1.7;flex:1}
+.mode .meta{margin-top:12px;font-size:12px;color:var(--dim)}
+.note{text-align:center;color:var(--dim);font-size:13px;margin-top:28px}
+
+/* setup */
+.setup{max-width:1180px;margin:0 auto;padding:8px 28px 60px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start}
+.col{display:flex;flex-direction:column;gap:20px;min-width:0}
+.card{border:1px solid var(--line);background:var(--panel);backdrop-filter:blur(12px);border-radius:16px;padding:22px}
+.card h2{font-size:13px;letter-spacing:.14em;color:var(--muted);font-weight:500;margin-bottom:14px;display:flex;align-items:center;gap:10px}
+.card h2 b{font-family:var(--disp);color:var(--c0);font-size:12px}
+.card .lead{color:var(--muted);font-size:14px;line-height:1.75;margin-bottom:14px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.row+.row{margin-top:12px}
+.field{flex:1;min-width:0;padding:11px 14px;border-radius:10px;border:1px solid var(--line);background:rgba(4,6,12,.6);outline:none;font-size:14px;transition:.2s}
+.field:focus{border-color:var(--c1);box-shadow:0 0 0 3px rgba(77,139,255,.18)}
+.field.num{flex:0 0 108px;font-variant-numeric:tabular-nums}
+.lbl{font-size:13px;color:var(--muted);min-width:76px}
+.btn{padding:11px 18px;border-radius:10px;border:1px solid var(--line2);background:var(--panel2);font-size:14px;transition:.15s;white-space:nowrap}
+.btn:hover{border-color:var(--c1);background:rgba(40,52,90,.7)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.sm{padding:8px 11px;font-size:13px}
+.btn kbd{font-size:.7em;margin-left:4px}
+.primary{padding:15px 26px;border-radius:12px;font-weight:700;font-size:16px;letter-spacing:.06em;color:#061018;
+  background:linear-gradient(90deg,var(--c0),var(--c1));box-shadow:0 8px 30px rgba(62,180,255,.3);transition:.2s}
+.primary:hover{filter:brightness(1.1);transform:translateY(-1px)}
+.primary:disabled{opacity:.35;cursor:not-allowed;transform:none;box-shadow:none;filter:grayscale(.6)}
+.drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:26px 16px;border:1.5px dashed var(--line2);border-radius:12px;cursor:pointer;text-align:center;transition:.2s;color:var(--muted);font-size:14px}
+.drop:hover,.drop.over{border-color:var(--c0);background:rgba(62,240,255,.05);color:var(--text)}
+.drop strong{color:var(--text);font-size:15px}
+.drop input{display:none}
+.hint{font-size:12.5px;color:var(--dim);line-height:1.7;margin-top:10px}
+.hint b{color:var(--muted);font-weight:500}
+.prog{height:6px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden;margin:6px 0 10px}
+.prog i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--c0),var(--c2));transition:width .2s}
+.progtxt{font-size:13px;color:var(--muted)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:4px 0 14px}
+.stat{padding:12px;border-radius:10px;background:rgba(4,6,12,.5);border:1px solid var(--line)}
+.stat small{display:block;font-size:11px;color:var(--dim);letter-spacing:.08em}
+.stat b{font-family:var(--disp);font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+#mini{width:100%;height:150px;display:block;border-radius:10px;background:rgba(4,6,12,.55);border:1px solid var(--line)}
+.legend{display:flex;gap:16px;font-size:12px;color:var(--dim);margin-top:8px;flex-wrap:wrap}
+.legend span::before{content:"";display:inline-block;width:10px;height:3px;border-radius:2px;margin-right:6px;vertical-align:middle;background:var(--k)}
+.yt-slot{width:100%;aspect-ratio:16/9;border-radius:12px;background:rgba(0,0,0,.5);border:1px solid var(--line);display:grid;place-items:center;color:var(--dim);font-size:13px;text-align:center;padding:12px}
+.diffs{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+.diff{padding:14px 10px;border-radius:12px;border:1px solid var(--line);background:rgba(4,6,12,.5);text-align:center;transition:.15s}
+.diff b{display:block;font-size:16px}
+.diff small{display:block;color:var(--dim);font-size:12px;margin-top:4px;font-variant-numeric:tabular-nums}
+.diff:hover{border-color:var(--line2)}
+.diff.on{border-color:var(--k);box-shadow:0 0 0 1px var(--k) inset,0 0 24px color-mix(in srgb,var(--k) 25%,transparent);background:color-mix(in srgb,var(--k) 8%,rgba(4,6,12,.5))}
+.diff.on b{color:var(--k)}
+.best{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--muted);margin-bottom:16px;padding:10px 14px;border-radius:10px;background:rgba(4,6,12,.4)}
+.best b{font-family:var(--disp);color:var(--gold);font-size:15px}
+#btnStart{width:100%}
+.err{color:var(--bad);font-size:13.5px;margin-top:10px;line-height:1.6}
+.ok{color:var(--c0)}
+.sep{height:1px;background:var(--line);margin:18px 0}
+.hide{display:none!important}
+
+/* game HUD */
+#stage{position:absolute;left:0;right:0;top:0;bottom:0;pointer-events:none}
+#stage *{pointer-events:auto}
+.hud-tl{position:absolute;left:24px;top:18px;max-width:34vw}
+.hud-tl .t{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 2px 10px #000}
+.hud-tl .d{font-family:var(--disp);font-size:11px;letter-spacing:.2em;margin-top:4px;color:var(--k,var(--c0))}
+.hud-tr{position:absolute;right:24px;top:14px;text-align:right}
+#hudScore{font-family:var(--disp);font-weight:700;font-size:30px;letter-spacing:.06em;font-variant-numeric:tabular-nums;text-shadow:0 0 18px rgba(62,240,255,.35),0 2px 10px #000}
+#hudAcc{font-family:var(--disp);font-size:13px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums}
+#hudCombo{position:absolute;left:50%;transform:translateX(-50%);text-align:center;pointer-events:none;opacity:0;transition:opacity .15s}
+#hudCombo .n{font-family:var(--disp);font-weight:900;font-size:56px;line-height:1;text-shadow:0 0 30px rgba(168,107,255,.5),0 2px 12px #000}
+#hudCombo .l{font-family:var(--disp);font-size:11px;letter-spacing:.5em;color:var(--muted);margin-top:4px;padding-left:.5em}
+#hudCombo.bump .n{animation:bump .12s ease-out}
+@keyframes bump{from{transform:scale(1.15)}to{transform:scale(1)}}
+#hudJudge{position:absolute;left:50%;transform:translateX(-50%);font-family:var(--disp);font-weight:900;font-size:26px;letter-spacing:.14em;pointer-events:none;opacity:0;text-align:center}
+#hudJudge small{display:block;font-size:11px;letter-spacing:.1em;font-weight:500;opacity:.8;margin-top:2px}
+#hudJudge.show{animation:judge .5s ease-out forwards}
+@keyframes judge{0%{opacity:1;transform:translate(-50%,6px) scale(1.25)}15%{opacity:1;transform:translate(-50%,0) scale(1)}70%{opacity:1}100%{opacity:0;transform:translate(-50%,-8px)}}
+#hudProg{position:absolute;left:0;right:0;bottom:0;height:3px;background:rgba(255,255,255,.06)}
+#hudProg i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--c0),var(--c3))}
+#hudMsg{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);padding:12px 20px;border-radius:12px;background:rgba(6,8,16,.85);border:1px solid var(--line2);font-size:14px;color:var(--text);pointer-events:none;text-align:center;line-height:1.7}
+#hudCount{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);font-family:var(--disp);font-weight:900;font-size:90px;color:var(--text);text-shadow:0 0 40px rgba(62,240,255,.6);pointer-events:none}
+.pause-ov{position:absolute;inset:0;display:grid;place-items:center;background:rgba(4,5,10,.72);backdrop-filter:blur(6px)}
+.pause-box{text-align:center;display:flex;flex-direction:column;gap:12px;min-width:240px}
+.pause-box h2{font-family:var(--disp);letter-spacing:.3em;font-size:28px;margin-bottom:10px}
+.pause-box p{color:var(--muted);font-size:13px;margin-bottom:6px}
+
+/* result */
+.result{max-width:760px;margin:0 auto;padding:6vh 28px 60px;text-align:center}
+.rsong{color:var(--muted);font-size:15px;margin-bottom:6px}
+.rdiff{font-family:var(--disp);font-size:12px;letter-spacing:.25em;color:var(--k)}
+.rank{font-family:var(--disp);font-weight:900;font-size:150px;line-height:1;margin:18px 0 0;background:linear-gradient(180deg,#fff,var(--k));-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 40px color-mix(in srgb,var(--k) 55%,transparent))}
+.fc{font-family:var(--disp);font-size:13px;letter-spacing:.35em;color:var(--gold);height:20px;margin-top:4px}
+.rscore{font-family:var(--disp);font-size:52px;font-weight:700;letter-spacing:.06em;margin-top:14px;font-variant-numeric:tabular-nums}
+.rnew{display:inline-block;margin-top:6px;padding:4px 12px;border-radius:20px;font-size:12px;letter-spacing:.2em;font-family:var(--disp);color:#1a1200;background:var(--gold)}
+.rgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:30px 0}
+.rgrid div{padding:14px 8px;border-radius:12px;border:1px solid var(--line);background:var(--panel)}
+.rgrid small{display:block;font-size:11px;color:var(--dim);letter-spacing:.12em}
+.rgrid b{display:block;font-family:var(--disp);font-size:22px;margin-top:6px;font-variant-numeric:tabular-nums}
+.ractions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+
+/* modal */
+.modal{position:fixed;inset:0;z-index:20;display:none;place-items:center;background:rgba(3,4,8,.7);backdrop-filter:blur(6px);padding:20px}
+.modal.open{display:grid}
+.panel{width:min(520px,100%);max-height:90vh;overflow:auto;border:1px solid var(--line2);background:#0b0e1a;border-radius:18px;padding:26px}
+.panel h2{font-family:var(--disp);letter-spacing:.2em;font-size:18px;margin-bottom:20px}
+.panel label{display:block;margin-bottom:18px;font-size:14px;color:var(--muted)}
+.panel label b{float:right;color:var(--text);font-family:var(--disp);font-size:13px}
+.panel input[type=range]{width:100%;margin-top:10px;accent-color:var(--c0)}
+.calib{border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:20px;background:rgba(4,6,12,.5)}
+.calib p{font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:12px}
+#calibViz{position:relative;height:34px;margin:12px 0 6px;border-radius:8px;background:rgba(255,255,255,.03)}
+#calibViz::before{content:"";position:absolute;left:50%;top:4px;bottom:4px;width:1px;background:var(--line2)}
+#calibViz i{position:absolute;top:50%;width:8px;height:8px;margin:-4px 0 0 -4px;border-radius:50%;background:var(--c0);box-shadow:0 0 8px var(--c0)}
+#calibViz span{position:absolute;bottom:-16px;font-size:10px;color:var(--dim)}
+#calibMsg{font-size:13px;color:var(--text);min-height:20px;margin-top:18px}
+.panel .primary{width:100%}
+
+#toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,20px);z-index:30;padding:12px 20px;border-radius:12px;background:rgba(12,16,30,.95);border:1px solid var(--line2);font-size:14px;opacity:0;pointer-events:none;transition:.25s;max-width:min(560px,90vw);text-align:center;line-height:1.6}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+
+@media (max-width:900px){
+  .setup{grid-template-columns:1fr}
+  .modes{grid-template-columns:1fr 1fr}
+  .mode,.mode:nth-child(4),.mode:nth-child(5){grid-column:span 1}
+  .rgrid{grid-template-columns:repeat(3,1fr)}
+}
+@media (max-width:560px){
+  .modes{grid-template-columns:1fr}
+  .topbar{padding:14px 16px}.home,.setup,.result{padding-left:16px;padding-right:16px}
+  .stats{grid-template-columns:repeat(3,1fr)}
+}
+</style>
+</head>
+<body>
+<div class="backdrop"><div class="floor"></div></div>
+<video id="bgVideo" playsinline preload="auto"></video>
+<div id="bgShade"></div>
+<canvas id="cv"></canvas>
+<div id="ytWrap"><div id="ytPlayer"></div></div>
+
+<!-- HOME -->
+<section id="home" class="screen active">
+  <header class="topbar">
+    <div class="brand"><span class="logo"><i></i><i></i><i></i><i></i></span>RHYTHM LANE</div>
+    <button class="ghost" data-open-settings>設定與延遲校正</button>
+  </header>
+  <main class="home">
+    <div class="hero">
+      <h1>RHYTHM<br><span>LANE</span></h1>
+      <p>選一首歌，瀏覽器自動分析節奏並生成譜面。<br>用 <kbd>D</kbd><kbd>F</kbd><kbd>J</kbd><kbd>K</kbd> 跟著音樂敲擊與長按。</p>
+    </div>
+    <div class="modes">
+      <button class="mode" data-mode="demo" style="--accent:var(--c0)">
+        <span class="tag">立即試玩</span><h3>示範曲</h3>
+        <p>內建程式合成的電子曲，不需要準備任何檔案就能體驗完整的分析與遊玩流程。</p>
+        <span class="meta">動態背景 · 約 68 秒</span>
+      </button>
+      <button class="mode" data-mode="video" style="--accent:var(--c3)">
+        <span class="tag">最佳體驗</span><h3>本機影片</h3>
+        <p>上傳 MP4 影片，系統分析影片音軌，遊戲軌道直接疊在影片畫面上。</p>
+        <span class="meta">影片背景 · 完全同步</span>
+      </button>
+      <button class="mode" data-mode="audio" style="--accent:var(--c2)">
+        <span class="tag">精準分析</span><h3>本機音樂</h3>
+        <p>上傳 MP3 或 WAV，分析鼓點與節拍後搭配隨音樂脈動的動態背景遊玩。</p>
+        <span class="meta">動態背景 · 完全同步</span>
+      </button>
+      <button class="mode" data-mode="ytq" style="--accent:var(--c1)">
+        <span class="tag">最快開始</span><h3>YouTube 快速模式</h3>
+        <p>貼上影片網址，設定 BPM 與第一拍時間，依節拍網格生成基礎譜面。YouTube 不提供音訊資料，因此此模式不分析鼓點。</p>
+        <span class="meta">影片在上、軌道在下 · 需設定 BPM</span>
+      </button>
+      <button class="mode" data-mode="yta" style="--accent:var(--gold)">
+        <span class="tag">進階</span><h3>YouTube 進階模式</h3>
+        <p>貼上影片網址，再上傳同一首歌的音檔。用音檔分析節奏、用 YouTube 播放，遊玩前校正兩者的時間偏移。</p>
+        <span class="meta">影片在上、軌道在下 · 需校正偏移</span>
+      </button>
+    </div>
+    <p class="note">所有音訊分析都在你的瀏覽器中完成，檔案不會上傳到任何伺服器。建議使用桌面版 Chrome 或 Edge。</p>
+  </main>
+</section>
+
+<!-- SETUP -->
+<section id="setup" class="screen">
+  <header class="topbar">
+    <button class="ghost" id="btnBack">← 返回</button>
+    <div class="crumb" id="setupTitle"></div>
+    <button class="ghost" data-open-settings>設定</button>
+  </header>
+  <main class="setup">
+    <div class="col">
+      <div class="card" id="srcCard"></div>
+      <div class="card" id="anaCard">
+        <h2><b>02</b>節奏分析</h2>
+        <div id="anaIdle" class="lead">載入歌曲後，這裡會顯示分析進度與結果。</div>
+        <div id="anaRun" class="hide"><div class="progtxt" id="progTxt">準備中…</div><div class="prog"><i id="progBar"></i></div></div>
+        <div id="anaDone" class="hide">
+          <div class="stats">
+            <div class="stat"><small>BPM</small><b id="stBpm">—</b></div>
+            <div class="stat"><small>長度</small><b id="stDur">—</b></div>
+            <div class="stat"><small>偵測鼓點</small><b id="stOn">—</b></div>
+          </div>
+          <canvas id="mini"></canvas>
+          <div class="legend"><span style="--k:rgba(140,170,255,.7)">音量能量</span><span style="--k:#fff">小節線</span><span style="--k:var(--c0)">目前難度譜面（四軌）</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card hide" id="ytCard">
+        <h2><b>YT</b>YouTube 影片</h2>
+        <div class="yt-slot" id="ytSlot">貼上網址並按「載入」後，影片會顯示在這裡。</div>
+        <p class="hint">依 YouTube 嵌入規範，遊戲軌道不會覆蓋播放器；遊玩時影片位於畫面上方，軌道從影片下緣延伸。</p>
+        <div id="ytTools"></div>
+      </div>
+      <div class="card" id="playCard">
+        <h2><b>03</b>難度與開始</h2>
+        <div class="diffs">
+          <button class="diff" data-d="easy" style="--k:var(--c0)"><b>簡單</b><small id="cnt-easy">—</small></button>
+          <button class="diff on" data-d="normal" style="--k:var(--c2)"><b>普通</b><small id="cnt-normal">—</small></button>
+          <button class="diff" data-d="hard" style="--k:var(--c3)"><b>困難</b><small id="cnt-hard">—</small></button>
+        </div>
+        <div class="best"><span>最高紀錄</span><b id="bestScore">—</b></div>
+        <button class="primary" id="btnStart" disabled>開始遊戲</button>
+        <p class="hint">遊戲中按 <b>Esc</b> 暫停。若覺得音符與音樂對不準，請到右上角「設定」做延遲校正。</p>
+      </div>
+    </div>
+  </main>
+</section>
+
+<!-- GAME -->
+<section id="game" class="screen">
+  <div id="stage">
+    <div class="hud-tl"><div class="t" id="hudTitle"></div><div class="d" id="hudDiff"></div></div>
+    <div class="hud-tr"><div id="hudScore">0000000</div><div id="hudAcc">100.00%</div></div>
+    <div id="hudCombo"><div class="n" id="hudComboN">0</div><div class="l">COMBO</div></div>
+    <div id="hudJudge"></div>
+    <div id="hudMsg" class="hide"></div>
+    <div id="hudCount" class="hide"></div>
+    <div id="hudProg"><i></i></div>
+    <div class="pause-ov hide" id="pauseOv">
+      <div class="pause-box">
+        <h2>PAUSED</h2>
+        <p id="pauseNote">按 Esc 或「繼續」回到遊戲</p>
+        <button class="primary" id="btnResume">繼續</button>
+        <button class="btn" id="btnRestart">重新開始</button>
+        <button class="btn" id="btnQuit">離開</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- RESULT -->
+<section id="result" class="screen">
+  <main class="result">
+    <div class="rsong" id="rSong"></div>
+    <div class="rdiff" id="rDiff"></div>
+    <div class="rank" id="rRank">S</div>
+    <div class="fc" id="rFC"></div>
+    <div class="rscore" id="rScore">0</div>
+    <div><span class="rnew hide" id="rNew">NEW RECORD</span></div>
+    <div class="rgrid">
+      <div><small>準確率</small><b id="rAcc">—</b></div>
+      <div><small>最大 COMBO</small><b id="rCombo">—</b></div>
+      <div><small>PERFECT</small><b id="rP" style="color:var(--gold)">—</b></div>
+      <div><small>GOOD</small><b id="rG" style="color:var(--c0)">—</b></div>
+      <div><small>MISS</small><b id="rM" style="color:var(--bad)">—</b></div>
+    </div>
+    <div class="ractions">
+      <button class="primary" id="btnRetry">重新挑戰</button>
+      <button class="btn" id="btnChangeDiff">更換難度</button>
+      <button class="btn" id="btnChangeSong">更換歌曲</button>
+    </div>
+  </main>
+</section>
+
+<!-- SETTINGS -->
+<div class="modal" id="settings">
+  <div class="panel">
+    <h2>設定</h2>
+    <label>音符流速 <b id="spdVal"></b><input type="range" id="spd" min="1" max="4" step="0.1"></label>
+    <label>裝置延遲補償 <b id="latVal"></b><input type="range" id="lat" min="-200" max="300" step="1"></label>
+    <div class="calib">
+      <p>延遲校正：按下開始後會播放節拍器，前 4 拍為預備，之後請<strong>只聽聲音</strong>，跟著每一拍按 <kbd>Space</kbd>（共 20 拍）。系統取你按鍵誤差的中位數作為延遲補償。使用藍牙耳機時特別建議校正。</p>
+      <button class="btn" id="btnCalib">開始延遲校正</button>
+      <div id="calibViz"><span style="left:2%">提早</span><span style="right:2%">延遲</span></div>
+      <div id="calibMsg"></div>
+    </div>
+    <button class="primary" id="btnCloseSettings">完成</button>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+'use strict';
+/* =========================================================
+   Rhythm Lane — 單一 HTML 自動譜面節奏遊戲
+   ========================================================= */
+const $=s=>document.querySelector(s);
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const tick=()=>new Promise(r=>setTimeout(r,0));
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function hashStr(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
+function fmtTime(s){if(!isFinite(s))return'—';s=Math.max(0,s);return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0')}
+function lowerBound(a,x){let lo=0,hi=a.length;while(lo<hi){const m=(lo+hi)>>1;if(a[m]<x)lo=m+1;else hi=m}return lo}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+const store={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+const settings=Object.assign({speed:2.0,latency:0},store.get('rl_settings',{}));
+function saveSettings(){store.set('rl_settings',settings)}
+let actx=null;
+function AC(){if(!actx){actx=new(window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'})}if(actx.state==='suspended')actx.resume();return actx}
+function ctxTimeAt(p){const c=AC();if(c.getOutputTimestamp){const ts=c.getOutputTimestamp();if(ts&&ts.performanceTime>0)return ts.contextTime+(p-ts.performanceTime)/1000}return c.currentTime-(c.outputLatency||c.baseLatency||0)+(p-performance.now())/1000}
+function evTime(e){const n=performance.now(),ts=e&&e.timeStamp;return(ts>0&&ts<=n+5&&n-ts<500)?ts:n}
+let toastT=0;
+function toast(msg,ms=2800){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),ms)}
+function pct(arr,p){const a=Float32Array.from(arr).sort();return a[Math.min(a.length-1,Math.floor(p*(a.length-1)))]||1e-9}
+function movAvg(a,r){const n=a.length,ps=new Float64Array(n+1);for(let i=0;i<n;i++)ps[i+1]=ps[i]+a[i];const o=new Float32Array(n);for(let i=0;i<n;i++){const lo=Math.max(0,i-r),hi=Math.min(n,i+r+1);o[i]=(ps[hi]-ps[lo])/(hi-lo)}return o}
+
+const LANE_RGB=[[62,240,255],[77,139,255],[168,107,255],[255,92,207]];
+const KEYS={KeyD:0,KeyF:1,KeyJ:2,KeyK:3};
+const KEY_LABELS=['D','F','J','K'];
+const WIN={P:0.05,G:0.10,M:0.15},HOLD_REL=0.10,LEAD=2.0;
+const DIFFS={
+  easy:  {name:'簡單',en:'EASY',  color:'#3ef0ff',density:1.6,minGap:0.33,maxLevel:1,l1min:0.6,hold:0.10,chord:0,   maxHoldBeats:2,block:true},
+  normal:{name:'普通',en:'NORMAL',color:'#a86bff',density:3.0,minGap:0.19,maxLevel:1,l1min:0,  hold:0.15,chord:0.04,maxHoldBeats:3,block:false},
+  hard:  {name:'困難',en:'HARD',  color:'#ff5ccf',density:5.0,minGap:0.11,maxLevel:2,l1min:0,  hold:0.18,chord:0.10,maxHoldBeats:4,block:false}
+};
+
+/* ---------------- FFT ---------------- */
+function makeFFT(n){
+  const lv=Math.log2(n)|0,rev=new Uint32Array(n);
+  for(let i=0;i<n;i++){let r=0,x=i;for(let j=0;j<lv;j++){r=(r<<1)|(x&1);x>>=1}rev[i]=r}
+  const co=new Float32Array(n/2),si=new Float32Array(n/2);
+  for(let i=0;i<n/2;i++){co[i]=Math.cos(2*Math.PI*i/n);si[i]=Math.sin(2*Math.PI*i/n)}
+  return function(re,im){
+    for(let i=0;i<n;i++){const j=rev[i];if(j>i){let t=re[i];re[i]=re[j];re[j]=t;t=im[i];im[i]=im[j];im[j]=t}}
+    for(let size=2;size<=n;size<<=1){const half=size>>1,step=n/size;
+      for(let i=0;i<n;i+=size){for(let j=i,k=0;j<i+half;j++,k+=step){
+        const l=j+half,tr=re[l]*co[k]+im[l]*si[k],ti=im[l]*co[k]-re[l]*si[k];
+        re[l]=re[j]-tr;im[l]=im[j]-ti;re[j]+=tr;im[j]+=ti}}}
+  };
+}
+
+/* =========================================================
+   節奏分析：Spectral Flux + 自相關 BPM + 動態規劃拍點追蹤
+   ========================================================= */
+async function analyzeBuffer(buf,prog){
+  prog('轉換為單聲道 22 kHz…',0.03);await tick();
+  const sr=22050,len=Math.max(2048,Math.ceil(buf.duration*sr));
+  const oc=new OfflineAudioContext(1,len,sr);const bs=oc.createBufferSource();bs.buffer=buf;bs.connect(oc.destination);bs.start();
+  const x=(await oc.startRendering()).getChannelData(0);
+  const N=1024,H=256,fps=sr/H,bins=N/2,off=(N/2)/sr;
+  const nF=Math.max(32,Math.floor((x.length-N)/H)+1);
+  const ft=f=>f/fps+off, tf=t=>Math.round((t-off)*fps);
+  const fft=makeFFT(N),win=new Float32Array(N);for(let i=0;i<N;i++)win[i]=0.5-0.5*Math.cos(2*Math.PI*i/(N-1));
+  const re=new Float32Array(N),im=new Float32Array(N),prev=new Float32Array(bins);
+  const flux=new Float32Array(nF),fLow=new Float32Array(nF),fHigh=new Float32Array(nF),rms=new Float32Array(nF);
+  const lowB=Math.round(200*N/sr),highB=Math.round(2500*N/sr);
+  for(let f=0;f<nF;f++){
+    const o=f*H;let e=0;
+    for(let i=0;i<N;i++){const v=x[o+i]||0;e+=v*v;re[i]=v*win[i];im[i]=0}
+    rms[f]=Math.sqrt(e/N);fft(re,im);
+    let s=0,sl=0,sh=0;
+    for(let k=1;k<bins;k++){const m=Math.log1p(100*Math.sqrt(re[k]*re[k]+im[k]*im[k]));const d=m-prev[k];prev[k]=m;
+      if(d>0){s+=d;if(k<lowB)sl+=d;else if(k>=highB)sh+=d}}
+    flux[f]=s;fLow[f]=sl;fHigh[f]=sh;
+    if(f%1500===0){prog('頻譜分析（Spectral Flux）'+Math.round(f/nF*100)+'%',0.05+0.62*f/nF);await tick()}
+  }
+  // 起始點強度曲線
+  const pF=pct(flux,0.95)||1,pL=pct(fLow,0.95)||1,pH=pct(fHigh,0.95)||1;
+  const raw=new Float32Array(nF);for(let i=0;i<nF;i++)raw[i]=flux[i]/pF+0.7*fLow[i]/pL;
+  const ma=movAvg(raw,Math.round(0.2*fps));
+  const env0=new Float32Array(nF);for(let i=0;i<nF;i++)env0[i]=Math.max(0,raw[i]-ma[i]);
+  const env=new Float32Array(nF);for(let i=0;i<nF;i++)env[i]=(env0[i-1]||0)*0.25+env0[i]*0.5+(env0[i+1]||0)*0.25;
+  const pE=pct(env,0.99)||1;for(let i=0;i<nF;i++)env[i]/=pE;
+  const rS=movAvg(rms,Math.round(0.08*fps)),pR=pct(rS,0.98)||1;
+  const energy=new Float32Array(nF);for(let i=0;i<nF;i++)energy[i]=Math.min(1.5,rS[i]/pR);
+
+  // BPM：自相關
+  prog('估計 BPM（自相關）…',0.7);await tick();
+  let mean=0;for(let i=0;i<nF;i++)mean+=env[i];mean/=nF;
+  const z=new Float32Array(nF);for(let i=0;i<nF;i++)z[i]=env[i]-mean;
+  const lMin=Math.floor(60*fps/180),lMax=Math.ceil(60*fps/70),acN=2*lMax+3,ac=new Float32Array(acN);
+  for(let l=lMin-1;l<acN&&l<nF;l++){let s=0;for(let i=0;i+l<nF;i++)s+=z[i]*z[i+l];ac[l]=s/(nF-l)}
+  let best=-1e18,bl=Math.round(60*fps/120);
+  for(let l=lMin;l<=lMax;l++){const bpm=60*fps/l,w=Math.exp(-0.5*Math.pow(Math.log2(bpm/120)/0.9,2));
+    const sc=(ac[l]+0.5*(ac[2*l]||0))*w;if(sc>best){best=sc;bl=l}}
+  let period=bl;{const a=ac[bl-1],b=ac[bl],c=ac[bl+1],den=a-2*b+c;if(den<0)period=bl+clamp(0.5*(a-c)/den,-0.5,0.5)}
+  let bpmEst=60*fps/period;while(bpmEst<80)bpmEst*=2;while(bpmEst>170)bpmEst/=2;period=60*fps/bpmEst;
+
+  // 拍點追蹤：動態規劃（Ellis 2007）
+  prog('追蹤拍點（動態規劃）…',0.78);await tick();
+  let sd=0;for(let i=0;i<nF;i++)sd+=(env[i]-mean)*(env[i]-mean);sd=Math.sqrt(sd/nF)||1;
+  const score=new Float32Array(nF),back=new Int32Array(nF);
+  const lo=Math.max(1,Math.round(period*0.5)),hi=Math.round(period*2),tight=100;
+  const pen=new Float32Array(hi+1);for(let g=lo;g<=hi;g++){const r=Math.log(g/period);pen[g]=tight*r*r}
+  for(let i=0;i<nF;i++){let bv=-1e18,bj=-1;const j1=i-lo;for(let j=Math.max(0,i-hi);j<=j1;j++){const v=score[j]-pen[i-j];if(v>bv){bv=v;bj=j}}
+    const ls=env[i]/sd;if(bj>=0&&bv>0){score[i]=ls+bv;back[i]=bj}else{score[i]=ls;back[i]=-1}}
+  let endF=nF-1,bsc=-1e18;for(let i=Math.max(0,nF-Math.round(period)-1);i<nF;i++)if(score[i]>bsc){bsc=score[i];endF=i}
+  const bf=[];for(let i=endF;i>=0;i=back[i])bf.push(i);bf.reverse();
+  let beats=bf.map(ft);
+  const iv=[];for(let i=1;i<beats.length;i++)iv.push(beats[i]-beats[i-1]);iv.sort((a,b)=>a-b);
+  let med=iv.length?iv[iv.length>>1]:60/bpmEst;
+  if(beats.length>8){let sx=0,sy=0,sxx=0,sxy=0;const n=beats.length;for(let i=0;i<n;i++){sx+=i;sy+=beats[i];sxx+=i*i;sxy+=i*beats[i]}const sl=(n*sxy-sx*sy)/(n*sxx-sx*sx);if(sl>0&&Math.abs(sl-med)/med<0.04)med=sl}
+  if(!beats.length)beats=[off];
+  while(beats[0]-med>0.02)beats.unshift(beats[0]-med);
+  while(beats[beats.length-1]+med<buf.duration)beats.push(beats[beats.length-1]+med);
+
+  // 鼓點偵測
+  prog('偵測鼓點與聲音起始點…',0.86);await tick();
+  const lm=movAvg(env,Math.round(0.5*fps)),onsets=[];let lastP=-99;
+  for(let i=3;i<nF-3;i++){const v=env[i];if(v<0.1)continue;let mx=true;for(let k=-3;k<=3;k++)if(env[i+k]>v){mx=false;break}
+    if(!mx||v<lm[i]*1.25+0.05||i-lastP<3)continue;lastP=i;
+    onsets.push({t:ft(i),s:Math.min(1.5,v),band:clamp(fHigh[i]/pH-fLow[i]/pL,-1,1)})}
+
+  // 拍點網格（1/4 拍）與吸附
+  const eAt=t=>energy[clamp(tf(t),0,nF-1)];
+  const envAt=t=>{const f=tf(t);let m=0;for(let k=-2;k<=2;k++){const v=env[f+k]||0;if(v>m)m=v}return m};
+  const slots=[];
+  for(let k=0;k<beats.length;k++){const b=beats[k],d=k<beats.length-1?beats[k+1]-b:med;
+    for(let q=0;q<4;q++)slots.push({t:b+q*d/4,level:q===0?0:q===2?1:2,d,str:0,band:0,hb:0,hs:0})}
+  const st=slots.map(s=>s.t);
+  for(const o of onsets){const i=lowerBound(st,o.t);let j=i;if(i>=st.length||(i>0&&Math.abs(st[i-1]-o.t)<Math.abs(st[i]-o.t)))j=i-1;if(j<0)continue;
+    const s=slots[j];if(Math.abs(s.t-o.t)<=s.d/8+0.012&&o.s>s.str){s.str=o.s;s.band=o.band}}
+  for(const s of slots){const e=eAt(s.t);if(e<0.04){s.str=0;continue}
+    if(s.level===0)s.str=Math.max(s.str,(0.25+0.35*Math.min(1,envAt(s.t)))*Math.min(1,e*3))}
+
+  // 長按候選：之後一段時間沒有強鼓點且能量持續
+  prog('分析適合長按的區段…',0.93);await tick();
+  for(let i=0;i<slots.length;i++){const s=slots[i];if(s.level>1||s.str<0.2)continue;
+    let base=0,nb=0;for(let f=tf(s.t+0.1);f<=tf(s.t+0.25);f++){base+=energy[f]||0;nb++}base/=Math.max(1,nb);if(base<0.15)continue;
+    let bS=0,bL=0,sS=0,sL=0;
+    for(let Lb=1;Lb<=4;Lb++){const te=s.t+Lb*s.d;if(te>buf.duration-0.2)break;
+      let mn=9;for(let f=tf(s.t+0.2);f<=tf(te-0.05);f++){const v=energy[f];if(v!==undefined&&v<mn)mn=v}
+      const sus=mn/base;if(sus<0.5)break;
+      let mx=0;for(let j=i+1;j<slots.length&&slots[j].t<te-s.d*0.2;j++)if(slots[j].str>mx)mx=slots[j].str;
+      const quiet=clamp(1-mx/(s.str+0.25),0,1);if(quiet<0.15)break;
+      const sc=quiet*0.7+Math.min(1,sus)*0.3+0.06*Lb;if(sc>bS){bS=sc;bL=Lb}if(quiet>=0.4&&sc>sS){sS=sc;sL=Lb}}
+    s.hb=bL;s.hs=bS;s.hbS=sL;s.hsS=sS}
+  const fs=onsets.find(o=>o.s>=0.6)||onsets[0];
+  prog('完成',1);
+  return{duration:buf.duration,bpm:60/med,beatDur:med,beats,slots,onsets,energy,fps,off,firstStrong:fs?fs.t:beats[0],grid:false};
+}
+
+/* YouTube 快速模式：沒有音訊，依 BPM 網格建立候選點 */
+function gridAnalysis(bpm,first,end){
+  const d=60/bpm,beats=[],slots=[];
+  let b=first;while(b-d>=0)b-=d;
+  for(;b<end-0.1;b+=d)beats.push(b);
+  for(let k=0;k<beats.length;k++){
+    const phrase=Math.floor((k-Math.round((first-beats[0])/d))/32);
+    const pr=mulberry32(((k%8)+1)*7919+(((phrase%2)+2)%2)*104729+Math.round(bpm*10));
+    for(let q=0;q<4;q++){const t=beats[k]+q*d/4;if(t<first-0.01||t>end)continue;
+      const level=q===0?0:q===2?1:2;let str,band;
+      if(level===0){str=(k%4===0)?1:0.82;band=(k%2===0)?-0.8:0.2}
+      else if(level===1){str=0.3+pr()*0.55;band=0.6}
+      else{str=pr()*0.6;band=0.85}
+      const s={t,level,d,str,band,hb:0,hs:0};
+      const kk=k-Math.round((first-beats[0])/d);
+      if(level===0&&kk>=0){if(kk%16===12){s.hb=4;s.hs=0.95}else if(kk%8===4){s.hb=2;s.hs=0.7+pr()*0.2}s.hbS=s.hb;s.hsS=s.hs}
+      slots.push(s)}}
+  return{duration:end,bpm,beatDur:d,beats:beats.filter(t=>t>=first-0.01),slots,onsets:[],energy:null,fps:0,off:0,firstStrong:first,grid:true};
+}
+
+/* =========================================================
+   譜面生成：依難度篩選 → 長按 → 雙押 → 軌道分配
+   ========================================================= */
+function generateChart(an,key){
+  const cfg=DIFFS[key];const rng=mulberry32(hashStr(key+':'+Math.round(an.duration*1000)+':'+Math.round(an.bpm*100)));
+  const LW=[1,0.72,0.5];
+  const c0=an.slots.filter(s=>s.str>0.05&&s.level<=cfg.maxLevel&&!(s.level===1&&s.str<cfg.l1min)&&s.t>0.4&&s.t<an.duration-0.3);
+  if(!c0.length)return[];
+  const span=c0[c0.length-1].t-c0[0].t,target=Math.max(8,Math.round(cfg.density*span));
+  const ranked=c0.map(s=>({s,sc:s.str*LW[s.level]+rng()*0.02})).sort((a,b)=>b.sc-a.sc);
+  const times=[],chosen=[];
+  for(const o of ranked){if(chosen.length>=target)break;const t=o.s.t,i=lowerBound(times,t);
+    if(i>0&&t-times[i-1]<cfg.minGap)continue;if(i<times.length&&times[i]-t<cfg.minGap)continue;
+    times.splice(i,0,t);chosen.push(o.s)}
+  chosen.sort((a,b)=>a.t-b.t);
+  let notes=chosen.map(s=>({t:s.t,end:s.t,slot:s,type:'tap',chord:false}));
+  // 長按
+  const holdTarget=Math.round(cfg.hold*notes.length),holds=[];
+  const tryHold=(n,hb)=>{const beats=Math.min(hb,cfg.maxHoldBeats),len=beats*n.slot.d;if(len<0.4||n.type==='hold')return false;
+    const end=n.t+len,ov=holds.filter(h=>h.t<end+0.15&&h.end>n.t-0.15).length;if(ov>=(key==='hard'?2:1))return false;
+    n.type='hold';n.end=end;holds.push(n);return true};
+  // 先用「真正安靜且能量持續」的區段，不足時才放寬條件（最多一半）
+  for(const n of notes.filter(n=>n.slot.hbS>=1).sort((a,b)=>b.slot.hsS-a.slot.hsS)){if(holds.length>=holdTarget)break;tryHold(n,n.slot.hbS)}
+  let relaxed=0;const relaxMax=Math.ceil(holdTarget*0.5);
+  for(const n of notes.filter(n=>n.slot.hb>=1&&n.slot.hs>0.3&&n.type!=='hold').sort((a,b)=>b.slot.hs-a.slot.hs)){if(holds.length>=holdTarget||relaxed>=relaxMax)break;if(tryHold(n,n.slot.hb))relaxed++}
+  if(cfg.block)notes=notes.filter(n=>n.type==='hold'||!holds.some(h=>n.t>h.t+0.001&&n.t<h.end+0.15));
+  // 雙押
+  if(cfg.chord>0)for(const n of notes)if(n.type==='tap'&&n.slot.level===0&&n.slot.str>0.8&&rng()<cfg.chord*2.5)n.chord=true;
+  // 軌道分配
+  const free=[-9,-9,-9,-9],out=[];let last=-1,lastT=-9,same=0;
+  for(const n of notes){
+    const pref=1.5+(n.slot.band||0)*1.3+(rng()-0.5)*1.4;
+    const w=[0,1,2,3].map(l=>{if(free[l]>n.t)return 0;let v=Math.exp(-((l-pref)*(l-pref))/1.8)*(0.5+rng());
+      if(l===last){const gap=n.t-lastT;v*=gap<0.3?0.03:(same>=2?0.02:0.5)}return v});
+    const pick=ex=>{let sum=0;for(let l=0;l<4;l++)if(l!==ex)sum+=w[l];if(sum<=0)return -1;let r=rng()*sum;for(let l=0;l<4;l++){if(l===ex)continue;r-=w[l];if(r<=0)return l}return -1};
+    const l1=pick(-1);if(l1<0)continue;
+    out.push({t:n.t,end:n.end,lane:l1,type:n.type});
+    free[l1]=n.type==='hold'?n.end+0.1:n.t+0.02;
+    if(n.chord){const l2=pick(l1);if(l2>=0){out.push({t:n.t,end:n.t,lane:l2,type:'tap'});free[l2]=n.t+0.02}}
+    same=(l1===last)?same+1:1;last=l1;lastT=n.t;
+  }
+  out.sort((a,b)=>a.t-b.t||a.lane-b.lane);
+  return out;
+}
+
+/* =========================================================
+   示範曲：以 OfflineAudioContext 合成 128 BPM 電子曲
+   ========================================================= */
+async function synthDemo(){
+  const bpm=128,B=60/bpm,bars=36,sr=44100,T0=0.5,dur=T0+bars*4*B+2.5;
+  const oc=new OfflineAudioContext(2,Math.ceil(dur*sr),sr);
+  const comp=oc.createDynamicsCompressor();comp.threshold.value=-16;comp.ratio.value=4;comp.connect(oc.destination);
+  const master=oc.createGain();master.gain.value=0.75;master.connect(comp);
+  const rnd=mulberry32(42);const nb=oc.createBuffer(1,sr,sr);const nd=nb.getChannelData(0);for(let i=0;i<sr;i++)nd[i]=rnd()*2-1;
+  const perc=(g,t,peak,dec)=>{g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(peak,t+0.002);g.gain.exponentialRampToValueAtTime(0.0001,t+dec)};
+  const sus=(g,t,a,peak,len,rel)=>{g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(peak,t+a);g.gain.setValueAtTime(peak,t+Math.max(a,len));g.gain.linearRampToValueAtTime(0,t+Math.max(a,len)+rel)};
+  const kick=(t,v=1)=>{const o=oc.createOscillator(),g=oc.createGain();o.frequency.setValueAtTime(155,t);o.frequency.exponentialRampToValueAtTime(42,t+0.13);perc(g,t,v,0.34);o.connect(g).connect(master);o.start(t);o.stop(t+0.4)};
+  const noise=(t,type,freq,q,v,dec)=>{const s=oc.createBufferSource();s.buffer=nb;const f=oc.createBiquadFilter();f.type=type;f.frequency.value=freq;f.Q.value=q;const g=oc.createGain();perc(g,t,v,dec);s.connect(f).connect(g).connect(master);s.start(t,rnd()*0.5);s.stop(t+dec+0.05)};
+  const snare=(t,v=0.55)=>{noise(t,'bandpass',1900,0.7,v,0.17);const o=oc.createOscillator(),g=oc.createGain();o.type='triangle';o.frequency.value=196;perc(g,t,v*0.6,0.09);o.connect(g).connect(master);o.start(t);o.stop(t+0.12)};
+  const hat=(t,v=0.16,open=false)=>noise(t,'highpass',7500,0.7,v,open?0.22:0.035);
+  const bass=(t,f,len)=>{const o=oc.createOscillator(),fl=oc.createBiquadFilter(),g=oc.createGain();o.type='sawtooth';o.frequency.value=f;fl.type='lowpass';fl.frequency.value=380;fl.Q.value=5;sus(g,t,0.005,0.3,len,0.03);o.connect(fl).connect(g).connect(master);o.start(t);o.stop(t+len+0.06)};
+  const pad=(t,freqs,len,v=0.05)=>{const fl=oc.createBiquadFilter(),g=oc.createGain();fl.type='lowpass';fl.frequency.value=1300;sus(g,t,0.35,v,len,0.5);fl.connect(g).connect(master);
+    for(const f of freqs)for(const dt of[-8,8]){const o=oc.createOscillator();o.type='sawtooth';o.frequency.value=f;o.detune.value=dt;o.connect(fl);o.start(t);o.stop(t+len+0.6)}};
+  const pluck=(t,f,len,v=0.085)=>{const o=oc.createOscillator(),fl=oc.createBiquadFilter(),g=oc.createGain();o.type='square';o.frequency.value=f;fl.type='lowpass';fl.frequency.setValueAtTime(3200,t);fl.frequency.exponentialRampToValueAtTime(700,t+len);perc(g,t,v,len);o.connect(fl).connect(g).connect(master);o.start(t);o.stop(t+len+0.05)};
+  const lead=(t,f,len,v=0.07)=>{const o=oc.createOscillator(),fl=oc.createBiquadFilter(),g=oc.createGain(),lfo=oc.createOscillator(),lg=oc.createGain();o.type='sawtooth';o.frequency.value=f;lfo.frequency.value=5.5;lg.gain.value=f*0.006;lfo.connect(lg).connect(o.frequency);fl.type='lowpass';fl.frequency.value=2200;sus(g,t,0.06,v,len,0.25);o.connect(fl).connect(g).connect(master);o.start(t);lfo.start(t);o.stop(t+len+0.3);lfo.stop(t+len+0.3)};
+  const PROG=[{r:110,p:[220,261.63,329.63]},{r:87.31,p:[174.61,220,261.63]},{r:130.81,p:[261.63,329.63,392]},{r:98,p:[196,246.94,293.66]}];
+  const ARP=[0,1,2,1,0,2,1,2];
+  for(let bi=0;bi<bars;bi++){
+    const t=T0+bi*4*B,ch=PROG[bi%4];
+    const sec=bi<4?'intro':bi<12?'verse':bi<16?'build':bi<24?'drop':bi<28?'break':'drop2';
+    if(sec==='intro'){pad(t,ch.p,4*B-0.1);if(bi>=2)for(let b=0;b<4;b++)kick(t+b*B,0.85)}
+    if(sec==='verse'||sec==='drop'||sec==='drop2'){
+      for(let b=0;b<4;b++){kick(t+b*B);if(b%2===1)snare(t+b*B)}
+      for(let e=0;e<8;e++){bass(t+e*B/2,ch.r*(e%2?2:1),B/2*0.8);if(e%2===1)hat(t+e*B/2,0.17,sec==='drop2')}
+    }
+    if(sec==='verse'){pluck(t,ch.p[0]*2,0.3);pluck(t+1.5*B,ch.p[1]*2,0.3);pluck(t+3*B,ch.p[2]*2,0.3)}
+    if(sec==='drop'||sec==='drop2'){pad(t,ch.p,4*B-0.1,0.035);for(let e=0;e<8;e++)pluck(t+e*B/2,ch.p[ARP[e]]*2,0.22,0.07);
+      if(sec==='drop2')for(let s=0;s<16;s++)if(s%2===0)hat(t+s*B/4,0.08)}
+    if(sec==='build'){pad(t,ch.p,4*B-0.1);for(let b=0;b<4;b++)kick(t+b*B,0.9);for(let e=0;e<8;e++)hat(t+e*B/2,0.12);
+      const n=bi===12?4:bi===13?4:bi===14?8:16;for(let s=0;s<n;s++)snare(t+s*4*B/n,0.25+0.35*(bi-12)/3+0.1*s/n)}
+    if(sec==='break'){pad(t,ch.p,4*B-0.05,0.06);lead(t,ch.p[2]*2,4*B-0.2);kick(t,0.6)}
+  }
+  const tEnd=T0+bars*4*B;kick(tEnd);pad(tEnd,PROG[0].p,1.4);snare(tEnd,0.4);
+  return await oc.startRendering();
+}
+
+/* =========================================================
+   時鐘：統一的時間基準
+   ========================================================= */
+class BufferPlayer{
+  constructor(buf){this.buf=buf;this.exact=true;this.node=null;this.offset=0;this.startCtx=0;this.isOn=false;this.done=false;this.kind='audio'}
+  play(from){const c=AC();if(from==null)from=this.offset;this._stop();const n=c.createBufferSource();n.buffer=this.buf;n.connect(c.destination);
+    this.startCtx=c.currentTime+0.04;this.offset=from;n.start(this.startCtx,Math.max(0,from));n.onended=()=>{if(this.node===n){this.isOn=false;this.done=true}};this.node=n;this.isOn=true;this.done=false}
+  pause(){if(!this.isOn)return;this.offset=Math.max(0,this.timeAt(performance.now()));this._stop();this.isOn=false}
+  _stop(){if(this.node){const n=this.node;this.node=null;n.onended=null;try{n.stop()}catch(e){}}}
+  timeAt(p){if(!this.isOn)return this.offset;return this.offset+(ctxTimeAt(p)-this.startCtx)}
+  raw(){return this.timeAt(performance.now())}
+  playing(){return this.isOn}
+  ended(){return this.done}
+  stop(){this._stop();this.isOn=false}
+}
+function videoAdapter(v){return{kind:'video',raw:()=>v.currentTime,playing:()=>!v.paused&&!v.ended&&v.readyState>=3,
+  play:(from)=>{if(from!=null)v.currentTime=from;const p=v.play();if(p&&p.catch)p.catch(()=>toast('瀏覽器阻擋了影片播放，請再點一次開始'))},
+  pause:()=>v.pause(),ended:()=>v.ended,stop:()=>v.pause()}}
+function ytAdapter(){return{kind:'yt',raw:()=>{try{return ytPlayer.getCurrentTime()||0}catch(e){return 0}},
+  playing:()=>{try{return ytPlayer.getPlayerState()===1&&!ytAdLikely()}catch(e){return false}},
+  play:(from)=>{if(from!=null)ytPlayer.seekTo(from,true);ytPlayer.playVideo()},pause:()=>{try{ytPlayer.pauseVideo()}catch(e){}},
+  ended:()=>{try{return ytPlayer.getPlayerState()===0}catch(e){return false}},stop:()=>{try{ytPlayer.pauseVideo()}catch(e){}}}}
+/* 影片與 YouTube 的播放時間更新較粗：以 performance.now() 外插並逐步修正 */
+class SmoothClock{
+  constructor(ad){this.ad=ad;this.aM=0;this.aP=performance.now();this.last=-1;this.frozen=true;this.onSeek=null}
+  update(){if(this.ad.exact)return;const now=performance.now(),raw=this.ad.raw(),pl=this.ad.playing();
+    if(!pl){if(Math.abs(raw-this.aM)>0.5&&this.onSeek)this.onSeek(this.aM,raw);this.frozen=true;this.aM=raw;this.aP=now;this.last=raw;return}
+    if(this.frozen){this.frozen=false;if(Math.abs(raw-this.aM)>0.5&&this.onSeek)this.onSeek(this.aM,raw);this.aM=raw;this.aP=now;this.last=raw;return}
+    if(raw!==this.last){this.last=raw;const pred=this.aM+(now-this.aP)/1000,err=raw-pred;
+      if(Math.abs(err)>0.5){if(this.onSeek)this.onSeek(pred,raw);this.aM=raw;this.aP=now}
+      else if(Math.abs(err)>0.08){this.aM=raw;this.aP=now}
+      else{this.aM+=err*0.12}}}
+  timeAt(p){if(this.ad.exact)return this.ad.timeAt(p);if(this.frozen)return this.aM;return this.aM+(p-this.aP)/1000}
+  isPlaying(){return this.ad.exact?this.ad.playing():!this.frozen}
+}
+
+/* =========================================================
+   YouTube IFrame Player API
+   ========================================================= */
+let ytPlayer=null,ytApiP=null,ytShown=false,ytPend=null;
+function parseYT(u){u=(u||'').trim();const m=u.match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/|\/live\/)([A-Za-z0-9_-]{11})/);if(m)return m[1];if(/^[A-Za-z0-9_-]{11}$/.test(u))return u;return null}
+function loadYTApi(){if(window.YT&&window.YT.Player)return Promise.resolve();if(ytApiP)return ytApiP;
+  ytApiP=new Promise((res,rej)=>{const prev=window.onYouTubeIframeAPIReady;window.onYouTubeIframeAPIReady=()=>{if(prev)prev();res()};
+    const s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';s.onerror=()=>{ytApiP=null;rej(new Error('YouTube API 載入失敗，請檢查網路連線'))};
+    document.head.appendChild(s);setTimeout(()=>{if(!(window.YT&&window.YT.Player)){ytApiP=null;rej(new Error('YouTube API 載入逾時'))}},15000)});
+  return ytApiP}
+const YT_ERR={2:'影片網址或 ID 無效。',5:'此影片無法在 HTML5 播放器播放。',100:'找不到影片，可能已被移除或設為私人。',101:'影片擁有者不允許在其他網站嵌入播放，請換一部影片（官方 MV 常有此限制，可改找歌詞版或 Topic 頻道）。',150:'影片擁有者不允許在其他網站嵌入播放，請換一部影片（官方 MV 常有此限制，可改找歌詞版或 Topic 頻道）。',153:'播放器無法辨識網站來源，請以 http(s) 網址開啟本頁（例如 GitHub Pages），不要直接雙擊開啟檔案。'};
+async function loadYTVideo(id){
+  await loadYTApi();showYT(true);S.ytOk=false;S.ytDuration=0;
+  return new Promise((res,rej)=>{
+    ytPend={res,rej};
+    if(!ytPlayer){
+      const pv={playsinline:1,rel:0,disablekb:1,controls:1,iv_load_policy:3};
+      if(location.protocol.startsWith('http'))pv.origin=location.origin;
+      ytPlayer=new YT.Player('ytPlayer',{videoId:id,width:'100%',height:'100%',playerVars:pv,
+        events:{onReady:()=>pollYT(id),onStateChange:e=>onYTState(e.data),onError:e=>onYTError(e.data),
+          onPlaybackRateChange:e=>{if(e.data!==1){try{ytPlayer.setPlaybackRate(1)}catch(_){}toast('為了讓譜面同步，播放速度固定為 1 倍。')}}}});
+    }else{ytPlayer.cueVideoById(id);pollYT(id)}
+  });
+}
+function pollYT(id){let n=0;const iv=setInterval(()=>{n++;let d=0,title='';try{d=ytPlayer.getDuration();const vd=ytPlayer.getVideoData();title=vd&&vd.video_id===id?vd.title:''}catch(e){}
+  if((d>0&&title)||n>40){clearInterval(iv);if(!ytPend)return;S.ytOk=true;S.ytDuration=d||0;S.ytTitle=title||('YouTube '+id);const p=ytPend;ytPend=null;p.res()}},200)}
+function onYTError(code){const msg=YT_ERR[code]||('YouTube 播放器錯誤（代碼 '+code+'）');S.ytOk=false;if(ytPend){const p=ytPend;ytPend=null;p.rej(new Error(msg))}else toast(msg,5000);
+  if(G&&screen==='game'){G.paused=true;$('#hudMsg').textContent=msg;$('#hudMsg').classList.remove('hide')}}
+function onYTState(s){if(s===1&&S.ytDuration<=0){try{S.ytDuration=ytPlayer.getDuration()}catch(e){}}}
+function ytAdLikely(){try{if(S.ytDuration>0){const d=ytPlayer.getDuration();if(d>0&&Math.abs(d-S.ytDuration)>2)return true}}catch(e){}return false}
+function showYT(on){ytShown=on;$('#ytWrap').style.display=on?'block':'none'}
+function placeYTSlot(){if(!ytShown)return;const r=$('#ytSlot').getBoundingClientRect(),w=$('#ytWrap').style;
+  w.left=r.left+'px';w.top=r.top+'px';w.width=r.width+'px';w.height=r.height+'px'}
+
+/* =========================================================
+   狀態與畫面切換
+   ========================================================= */
+const S={mode:null,isYT:false,buffer:null,file:null,videoUrl:null,ytId:null,ytTitle:'',ytDuration:0,ytOk:false,
+  analysis:null,charts:{},diff:store.get('rl_diff','normal'),title:'',key:'',offset:0,busy:false};
+let screen='home';
+function showScreen(id){screen=id;document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('active',s.id===id));
+  document.body.classList.toggle('playing',id==='game');
+  const cv=$('#cv');cv.style.display=id==='game'?'block':'none';
+  const vid=S.mode==='video'&&id==='game';$('#bgVideo').style.display=vid?'block':'none';$('#bgShade').style.display=vid?'block':'none';
+  const yw=$('#ytWrap');yw.classList.toggle('game',id==='game');
+  if(S.isYT&&ytPlayer&&(id==='setup'||id==='game'))showYT(true);else if(ytShown)showYT(false);
+  if(id==='setup')requestAnimationFrame(()=>{placeYTSlot();drawMini()});
+}
+const MODE_NAMES={demo:'示範曲',video:'本機影片',audio:'本機音樂',ytq:'YouTube 快速模式',yta:'YouTube 進階模式'};
+
+function enterMode(mode){
+  stopPreviews();
+  if(S.mode!==mode||mode==='demo'){S.analysis=null;S.charts={};S.buffer=null;S.title='';S.key=''}
+  if(S.isYT&&!(mode==='ytq'||mode==='yta')&&ytPlayer){try{ytPlayer.stopVideo()}catch(e){}}
+  S.mode=mode;S.isYT=mode==='ytq'||mode==='yta';
+  $('#setupTitle').textContent=MODE_NAMES[mode].toUpperCase();
+  $('#ytCard').classList.toggle('hide',!S.isYT);
+  buildSrcCard();buildYTTools();resetAnaUI();
+  if(S.analysis)showAnalysisDone();
+  showScreen('setup');refreshPlayCard();
+  if(mode==='demo'&&!S.analysis)setTimeout(()=>runDemo(),50);
+}
+function dropZone(id,accept,title,sub){return`<label class="drop" id="${id}Drop"><input type="file" id="${id}" accept="${accept}"><strong>${title}</strong><span>${sub}</span></label>`}
+function buildSrcCard(){
+  const m=S.mode,el=$('#srcCard');let h='<h2><b>01</b>載入歌曲</h2>';
+  if(m==='demo')h+=`<p class="lead">示範曲是由程式即時合成的 128 BPM 電子曲（前奏、主歌、漸強、副歌、間奏長音、副歌），合成後會和其他歌曲一樣走完整的節奏分析流程。</p><button class="btn" id="btnDemo">重新生成並分析</button>`;
+  if(m==='video')h+=`<p class="lead">影片的音軌會在瀏覽器中解碼分析；遊玩時影片作為全螢幕背景，軌道疊在影片上。</p>`+dropZone('fileVideo','video/*,.mp4,.webm,.mov','選擇或拖曳影片檔','MP4（H.264／AAC）相容性最佳')+`<p class="hint" id="srcInfo"></p>`;
+  if(m==='audio')h+=`<p class="lead">分析音檔中的節拍、鼓點與能量變化並生成譜面。</p>`+dropZone('fileAudio','audio/*,.mp3,.wav,.ogg,.m4a,.flac','選擇或拖曳音樂檔','MP3、WAV、OGG、M4A')+`<p class="hint" id="srcInfo"></p>`;
+  if(m==='ytq'||m==='yta'){h+=`<p class="lead">貼上 YouTube 影片網址（支援 watch、youtu.be、shorts 連結）。</p>
+    <div class="row"><input class="field" id="ytUrl" placeholder="https://www.youtube.com/watch?v=…" value="${esc(S.ytId?'https://youtu.be/'+S.ytId:'')}"><button class="btn" id="btnYtLoad">載入</button></div><p class="hint" id="ytInfo">${S.ytOk?'已載入：'+esc(S.ytTitle):''}</p>`;
+    if(m==='yta')h+=`<div class="sep"></div><p class="lead">上傳<strong>同一首歌</strong>的音檔供分析（遊玩時只播放 YouTube 的聲音）。</p>`+dropZone('fileAudio','audio/*,.mp3,.wav,.ogg,.m4a,.flac','選擇或拖曳音樂檔','MP3、WAV、OGG、M4A')+`<p class="hint" id="srcInfo"></p>`;}
+  h+='<p class="err hide" id="srcErr"></p>';
+  el.innerHTML=h;
+  if(m==='demo')$('#btnDemo').onclick=()=>runDemo();
+  if(m==='video')bindFile('fileVideo',f=>loadVideoFile(f));
+  if(m==='audio'||m==='yta')bindFile('fileAudio',f=>loadAudioFile(f));
+  if(S.isYT){$('#btnYtLoad').onclick=()=>doLoadYT();$('#ytUrl').addEventListener('keydown',e=>{if(e.key==='Enter')doLoadYT()})}
+}
+function bindFile(id,cb){const inp=$('#'+id),dz=$('#'+id+'Drop');inp.onchange=()=>{if(inp.files[0])cb(inp.files[0])};
+  dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('over')});dz.addEventListener('dragleave',()=>dz.classList.remove('over'));
+  dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('over');const f=e.dataTransfer.files[0];if(f)cb(f)})}
+function srcErr(msg){const e=$('#srcErr');if(!e)return toast(msg,5000);e.textContent=msg||'';e.classList.toggle('hide',!msg)}
+
+function buildYTTools(){
+  const el=$('#ytTools');if(!S.isYT){el.innerHTML='';return}
+  if(S.mode==='ytq'){const q=S.quick||(S.quick={bpm:120,first:0,end:0});
+    el.innerHTML=`<div class="sep"></div><h2><b>02</b>節拍設定</h2>
+    <p class="lead">YouTube 不提供音訊資料，請設定 BPM 與第一拍時間。可以邊播放影片邊按鍵盤輔助：</p>
+    <div class="row"><span class="lbl">BPM</span><input class="field num" id="qBpm" type="number" min="40" max="260" step="0.1" value="${q.bpm}"><button class="btn sm" id="btnTap">跟拍測速 <kbd>T</kbd></button><span class="hint" id="tapInfo" style="margin:0"></span></div>
+    <div class="row"><span class="lbl">第一拍（秒）</span><input class="field num" id="qFirst" type="number" min="0" step="0.01" value="${q.first}"><button class="btn sm" id="btnMarkFirst">聽到第一拍時按 <kbd>B</kbd></button></div>
+    <div class="row"><span class="lbl">結束（秒）</span><input class="field num" id="qEnd" type="number" min="0" step="1" value="${q.end||''}" placeholder="影片長度"></div>
+    <div class="row"><button class="btn" id="btnMetro">節拍器試聽</button><button class="btn" id="btnGen">生成譜面</button></div>
+    <p class="hint">試聽時會在影片上疊加滴答聲，用來確認 BPM 與第一拍是否對齊；調整後按「生成譜面」。</p>`;
+    $('#btnTap').onclick=e=>tapTempo(e);$('#btnMarkFirst').onclick=e=>markB(e);$('#btnMetro').onclick=()=>toggleMetro();$('#btnGen').onclick=()=>genQuick();
+    ['qBpm','qFirst','qEnd'].forEach(id=>$('#'+id).addEventListener('input',()=>{q.bpm=+$('#qBpm').value;q.first=+$('#qFirst').value;q.end=+$('#qEnd').value||0}));
+  }else{
+    el.innerHTML=`<div class="sep"></div><h2><b>02</b>時間偏移校正</h2>
+    <p class="lead" id="offInfo">先載入影片並完成音檔分析。</p>
+    <div class="row"><button class="btn sm" id="btnPrevAudio">試聽音檔第一個強拍</button><button class="btn sm" id="btnMarkOff">影片中聽到該拍時按 <kbd>B</kbd></button></div>
+    <div class="row"><span class="lbl">偏移（秒）</span><input class="field num" id="offset" type="number" step="0.01" value="${S.offset.toFixed(2)}">
+      <button class="btn sm" data-off="-0.05">−0.05</button><button class="btn sm" data-off="-0.01">−0.01</button><button class="btn sm" data-off="0.01">+0.01</button><button class="btn sm" data-off="0.05">+0.05</button></div>
+    <div class="row"><button class="btn" id="btnMetro">節拍器試聽</button></div>
+    <p class="hint">偏移＝影片時間比音檔時間晚多少秒（MV 有前奏劇情時為正值）。試聽時會在影片上疊加分析出的拍點滴答聲，對齊後即可開始。</p>`;
+    $('#btnPrevAudio').onclick=()=>previewAudioStart();$('#btnMarkOff').onclick=e=>markB(e);$('#btnMetro').onclick=()=>toggleMetro();
+    $('#offset').addEventListener('input',()=>{S.offset=+$('#offset').value||0});
+    el.querySelectorAll('[data-off]').forEach(b=>b.onclick=()=>{S.offset=Math.round((S.offset+ +b.dataset.off)*100)/100;$('#offset').value=S.offset.toFixed(2)});
+    updateOffInfo();
+  }
+}
+function updateOffInfo(){const el=$('#offInfo');if(!el)return;if(!S.analysis||S.analysis.grid){el.textContent='先載入影片並完成音檔分析。';return}
+  let s=`音檔第一個強拍在 <b class="ok">${S.analysis.firstStrong.toFixed(2)} 秒</b>。先試聽記住它的聲音，再播放影片，聽到同一拍時按 B，即可自動算出偏移。`;
+  if(S.ytDuration>0){const d=S.ytDuration-S.analysis.duration;s+=` 影片比音檔${d>=0?'長':'短'} ${Math.abs(d).toFixed(1)} 秒，可能有額外前奏或片尾。`}
+  el.innerHTML=s}
+
+async function doLoadYT(){const id=parseYT($('#ytUrl').value);if(!id){srcErr('看不懂這個網址，請貼上 YouTube 影片連結。');return}
+  srcErr('');stopPreviews();$('#ytInfo').textContent='載入中…';S.ytId=id;
+  try{await loadYTVideo(id);$('#ytInfo').innerHTML='已載入：'+esc(S.ytTitle)+(S.ytDuration?'（'+fmtTime(S.ytDuration)+'）':'');
+    if(S.mode==='ytq'){const q=S.quick;if(!q.end&&S.ytDuration){q.end=Math.floor(S.ytDuration);$('#qEnd').value=q.end}S.title=S.ytTitle;S.analysis=null;S.charts={};resetAnaUI()}
+    else{S.title=S.ytTitle;updateOffInfo()}
+    refreshPlayCard()}
+  catch(e){$('#ytInfo').textContent='';srcErr(e.message);S.ytOk=false;refreshPlayCard()}}
+
+/* ---------------- 載入與分析 ---------------- */
+function resetAnaUI(){$('#anaIdle').classList.toggle('hide',!!S.analysis);$('#anaRun').classList.add('hide');$('#anaDone').classList.toggle('hide',!S.analysis)}
+function setProg(txt,p){$('#anaIdle').classList.add('hide');$('#anaRun').classList.remove('hide');$('#anaDone').classList.add('hide');$('#progTxt').textContent=txt;$('#progBar').style.width=Math.round(p*100)+'%'}
+async function runAnalysis(buf){
+  S.busy=true;refreshPlayCard();
+  try{const t0=performance.now();S.analysis=await analyzeBuffer(buf,setProg);S.buffer=buf;
+    for(const k in DIFFS)S.charts[k]=generateChart(S.analysis,k);
+    console.log('[RhythmLane] analysis',Math.round(performance.now()-t0)+'ms','BPM',S.analysis.bpm.toFixed(2));
+    showAnalysisDone();updateOffInfo()}
+  catch(e){console.error(e);resetAnaUI();srcErr('分析失敗：'+(e.message||e))}
+  S.busy=false;refreshPlayCard()}
+function showAnalysisDone(){const an=S.analysis;$('#anaIdle').classList.add('hide');$('#anaRun').classList.add('hide');$('#anaDone').classList.remove('hide');
+  $('#stBpm').textContent=an.bpm.toFixed(1);$('#stDur').textContent=fmtTime(an.duration);$('#stOn').textContent=an.grid?'—':an.onsets.length;
+  requestAnimationFrame(drawMini)}
+async function decodeFile(f){const ab=await f.arrayBuffer();return await AC().decodeAudioData(ab)}
+async function runDemo(){if(S.busy)return;srcErr('');setProg('合成示範曲…',0.01);S.busy=true;refreshPlayCard();
+  try{const buf=await synthDemo();S.title='Neon Drive（示範曲）';S.key='demo';S.busy=false;await runAnalysis(buf)}catch(e){S.busy=false;srcErr('示範曲合成失敗：'+e.message);resetAnaUI();refreshPlayCard()}}
+async function loadAudioFile(f){if(S.busy)return;srcErr('');stopPreviews();setProg('解碼音訊…',0.01);
+  try{const buf=await decodeFile(f);$('#srcInfo').textContent=f.name+' · '+fmtTime(buf.duration);
+    if(S.mode==='audio'){S.title=f.name.replace(/\.[^.]+$/,'');S.key='a:'+f.name+':'+f.size}else{S.key='yt:'+S.ytId+':'+f.size;if(!S.title)S.title=f.name.replace(/\.[^.]+$/,'')}
+    await runAnalysis(buf)}catch(e){console.error(e);resetAnaUI();srcErr('無法解碼這個檔案，請改用 MP3 或 WAV。')}}
+async function loadVideoFile(f){if(S.busy)return;srcErr('');setProg('解碼影片音軌…',0.01);
+  try{if(S.videoUrl)URL.revokeObjectURL(S.videoUrl);S.videoUrl=URL.createObjectURL(f);const v=$('#bgVideo');v.src=S.videoUrl;v.load();
+    const buf=await decodeFile(f);$('#srcInfo').textContent=f.name+' · '+fmtTime(buf.duration);S.title=f.name.replace(/\.[^.]+$/,'');S.key='v:'+f.name+':'+f.size;
+    await runAnalysis(buf)}catch(e){console.error(e);resetAnaUI();srcErr('無法解碼這部影片的音軌。請改用 MP4（H.264／AAC），或使用 Chrome／Edge。')}}
+function genQuick(){const q=S.quick;q.bpm=+$('#qBpm').value;q.first=+$('#qFirst').value||0;q.end=+$('#qEnd').value||Math.floor(S.ytDuration)||0;
+  if(!S.ytOk){toast('請先載入 YouTube 影片');return}
+  if(!(q.bpm>=40&&q.bpm<=260)){toast('BPM 需介於 40–260');return}
+  if(!(q.end>q.first+10)){toast('請填寫結束時間（播放一下影片即可取得長度）');return}
+  stopPreviews();S.analysis=gridAnalysis(q.bpm,q.first,q.end);S.charts={};for(const k in DIFFS)S.charts[k]=generateChart(S.analysis,k);
+  S.key='yt:'+S.ytId+':q'+q.bpm+':'+q.first;S.title=S.ytTitle;showAnalysisDone();refreshPlayCard();toast('已依 BPM 網格生成譜面')}
+
+/* ---------------- 難度與開始 ---------------- */
+function bestKey(){return'rl_best_'+hashStr(S.key)+'_'+S.diff}
+function refreshPlayCard(){
+  document.querySelectorAll('.diff').forEach(b=>{b.classList.toggle('on',b.dataset.d===S.diff);const c=S.charts[b.dataset.d];
+    $('#cnt-'+b.dataset.d).textContent=c?c.length+' 個音符 · '+c.filter(n=>n.type==='hold').length+' 長按':'—'});
+  const b=S.analysis&&S.key?store.get(bestKey(),null):null;
+  $('#bestScore').textContent=b?String(b.score).padStart(7,'0')+' · '+b.rank:'—';
+  let ok=!!(S.analysis&&S.charts[S.diff]&&S.charts[S.diff].length)&&!S.busy;
+  if(S.isYT)ok=ok&&S.ytOk;
+  $('#btnStart').disabled=!ok;
+  $('#btnStart').textContent=S.busy?'分析中…':(S.isYT&&!S.ytOk?'請先載入 YouTube 影片':(!S.analysis?'等待歌曲':'開始遊戲'));
+}
+document.querySelectorAll('.diff').forEach(b=>b.onclick=()=>{S.diff=b.dataset.d;store.set('rl_diff',S.diff);refreshPlayCard();drawMini()});
+
+/* 分析結果迷你圖 */
+function drawMini(){const cv=$('#mini');if(!cv||!S.analysis||screen!=='setup'||!cv.clientWidth)return;
+  const dpr=Math.min(2,devicePixelRatio||1),w=cv.clientWidth,h=cv.clientHeight;cv.width=w*dpr;cv.height=h*dpr;const c=cv.getContext('2d');c.scale(dpr,dpr);
+  const an=S.analysis,dur=an.duration,chart=S.charts[S.diff]||[],X=t=>t/dur*w,eh=70;
+  c.clearRect(0,0,w,h);
+  if(an.energy){c.beginPath();c.moveTo(0,eh);const n=an.energy.length,step=Math.max(1,Math.floor(n/w));
+    for(let i=0;i<n;i+=step){let m=0;for(let k=0;k<step;k++)m=Math.max(m,an.energy[i+k]||0);c.lineTo((i/an.fps+an.off)/dur*w,eh-Math.min(1,m)*(eh-8))}
+    c.lineTo(w,eh);c.closePath();const g=c.createLinearGradient(0,0,0,eh);g.addColorStop(0,'rgba(140,170,255,.6)');g.addColorStop(1,'rgba(140,170,255,.05)');c.fillStyle=g;c.fill()}
+  if(!an.energy){c.fillStyle='rgba(140,170,255,.5)';c.font='12px "Noto Sans TC",sans-serif';c.fillText('快速模式：依 BPM 網格生成（無音訊能量資料）',10,24)}
+  c.fillStyle='rgba(255,255,255,.18)';an.beats.forEach((b,i)=>{if(i%4===0)c.fillRect(X(b),eh+2,1,h-eh-2)});
+  const rowH=(h-eh-12)/4;
+  for(const n of chart){const y=eh+8+n.lane*rowH+rowH/2,col=LANE_RGB[n.lane];c.fillStyle=`rgb(${col})`;
+    if(n.type==='hold'){c.globalAlpha=.55;c.fillRect(X(n.t),y-2,Math.max(2,X(n.end)-X(n.t)),4);c.globalAlpha=1}c.fillRect(X(n.t)-1,y-3,2.2,6)}
+}
+
+/* ---------------- YouTube 輔助：標記、測速、節拍器 ---------------- */
+let setupClock=null,metro={on:false,done:new Set(),clock:null},taps=[],audioPrev=null;
+function ensureSetupClock(){if(!setupClock&&ytPlayer){setupClock=new SmoothClock(ytAdapter())}return setupClock}
+function ytNowAt(p){const c=ensureSetupClock();if(!c)return 0;c.update();return c.timeAt(p)}
+function markB(e){if(!S.isYT||!S.ytOk){toast('請先載入 YouTube 影片');return}
+  let st=-1;try{st=ytPlayer.getPlayerState()}catch(_){}if(st!==1){toast('請先播放影片，聽到該拍時再按 B');return}
+  const vt=ytNowAt(evTime(e))-settings.latency/1000;
+  if(S.mode==='ytq'){const v=Math.max(0,Math.round(vt*100)/100);S.quick.first=v;$('#qFirst').value=v;toast('第一拍設為 '+v.toFixed(2)+' 秒')}
+  else{if(!S.analysis){toast('請先上傳並分析音檔');return}S.offset=Math.round((vt-S.analysis.firstStrong)*100)/100;$('#offset').value=S.offset.toFixed(2);toast('偏移設為 '+S.offset.toFixed(2)+' 秒，可用節拍器試聽確認')}}
+function tapTempo(e){if(S.mode!=='ytq')return;const now=evTime(e);if(taps.length&&now-taps[taps.length-1]>2000)taps=[];taps.push(now);if(taps.length>16)taps.shift();
+  if(taps.length>=4){const iv=[];for(let i=1;i<taps.length;i++)iv.push(taps[i]-taps[i-1]);iv.sort((a,b)=>a-b);const bpm=Math.round(60000/iv[iv.length>>1]*10)/10;
+    $('#qBpm').value=bpm;S.quick.bpm=bpm;$('#tapInfo').textContent='已按 '+taps.length+' 次'}else $('#tapInfo').textContent='再按 '+(4-taps.length)+' 次'}
+function click(t,f,v=0.25){const c=AC(),o=c.createOscillator(),g=c.createGain();o.type='square';o.frequency.value=f;g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(v,t+0.002);g.gain.exponentialRampToValueAtTime(0.0001,t+0.05);o.connect(g).connect(c.destination);o.start(t);o.stop(t+0.06)}
+function metroBeats(){if(S.mode==='ytq'){const q=S.quick,bpm=+$('#qBpm').value||q.bpm,first=+$('#qFirst').value||0,d=60/bpm,a=[];for(let t=first;t<(S.ytDuration||600);t+=d)a.push(t);return{beats:a,off:0}}
+  return{beats:S.analysis?S.analysis.beats:[],off:S.offset}}
+function toggleMetro(){if(!S.ytOk){toast('請先載入 YouTube 影片');return}if(S.mode==='yta'&&!S.analysis){toast('請先上傳並分析音檔');return}
+  AC();metro.on=!metro.on;metro.done.clear();const b=$('#btnMetro');
+  if(metro.on){metro.clock=new SmoothClock(ytAdapter());let st=-1;try{st=ytPlayer.getPlayerState()}catch(e){}if(st!==1)ytPlayer.playVideo();b.textContent='停止試聽'}
+  else{try{ytPlayer.pauseVideo()}catch(e){}b.textContent='節拍器試聽'}}
+function metroTick(){if(!metro.on||!metro.clock)return;metro.clock.update();if(!metro.clock.isPlaying())return;
+  const c=AC(),now=performance.now(),mt=metro.clock.timeAt(now),{beats,off}=metroBeats();
+  let i=lowerBound(beats,mt-off);for(;i<beats.length;i++){const m=beats[i]+off;if(m>mt+0.12)break;if(m<mt||metro.done.has(i))continue;metro.done.add(i);
+    click(c.currentTime+(m-mt)+settings.latency/1000*0,i%4===0?2000:1400,0.22)}}
+function previewAudioStart(){if(!S.buffer||!S.analysis){toast('請先上傳並分析音檔');return}stopPreviews();try{ytPlayer.pauseVideo()}catch(e){}
+  const c=AC(),src=c.createBufferSource(),g=c.createGain();src.buffer=S.buffer;src.connect(g).connect(c.destination);const from=Math.max(0,S.analysis.firstStrong-2);
+  src.start(c.currentTime+0.05,from,6);g.gain.setValueAtTime(1,c.currentTime+5.2);g.gain.linearRampToValueAtTime(0,c.currentTime+6);audioPrev=src;
+  click(c.currentTime+0.05+(S.analysis.firstStrong-from),2400,0.15);toast('播放音檔：第 2 秒處（滴聲）就是第一個強拍')}
+function stopPreviews(){if(metro.on){metro.on=false;const b=$('#btnMetro');if(b)b.textContent='節拍器試聽';try{ytPlayer&&ytPlayer.pauseVideo()}catch(e){}}
+  if(audioPrev){try{audioPrev.stop()}catch(e){}audioPrev=null}}
+
+/* =========================================================
+   遊戲引擎
+   ========================================================= */
+let G=null,L={};
+const cv=$('#cv'),cx=cv.getContext('2d');
+function startGame(){
+  const chart=S.charts[S.diff];if(!chart||!chart.length){toast('此難度沒有音符');return}
+  stopPreviews();AC();
+  const lat=settings.latency/1000,off=S.mode==='yta'?S.offset:0,startChart=0-off-lat;
+  const notes=chart.filter(n=>n.t>=startChart+0.8).map(n=>({t:n.t,end:n.end,lane:n.lane,type:n.type,j:null,tj:null,holding:false}));
+  if(!notes.length){toast('偏移設定使所有音符落在影片開始之前，請調整偏移');return}
+  const lanes=[[],[],[],[]];notes.forEach(n=>lanes[n.lane].push(n));
+  if(G&&G.adapter)G.adapter.stop();
+  let adapter;
+  if(S.mode==='video'){const v=$('#bgVideo');v.pause();v.currentTime=0;adapter=videoAdapter(v)}
+  else if(S.isYT){try{ytPlayer.pauseVideo();ytPlayer.seekTo(0,true);ytPlayer.pauseVideo()}catch(e){}adapter=ytAdapter()}
+  else adapter=new BufferPlayer(S.buffer);
+  const clock=new SmoothClock(adapter);
+  const units=notes.reduce((a,n)=>a+(n.type==='hold'?2:1),0),lastEnd=notes.reduce((m,n)=>Math.max(m,n.end),0);
+  G={notes,lanes,ptr:[0,0,0,0],units,unitScore:1e6/units,P:0,Gd:0,M:0,combo:0,maxCombo:0,score:0,phase:'lead',leadStart:performance.now(),
+    mediaStarted:false,startChart,off,lat,adapter,clock,down:[0,0,0,0],pressAt:[0,0,0,0],fx:[],endT:lastEnd+2,paused:false,counting:false,
+    look:2.2/settings.speed,an:S.analysis,cfg:DIFFS[S.diff]};
+  clock.onSeek=(a,b)=>onSeek(a,b);
+  showScreen('game');layoutGame();
+  $('#hudTitle').textContent=S.title||'';$('#hudDiff').textContent=G.cfg.en;$('#hudDiff').style.setProperty('--k',G.cfg.color);
+  $('#pauseOv').classList.add('hide');$('#hudMsg').classList.add('hide');$('#hudCount').classList.add('hide');$('#hudCombo').style.opacity=0;$('#hudJudge').className='';
+  updateHUD(startChart-LEAD);
+}
+function gTime(p){
+  if(G.phase==='lead'){const el=(p-G.leadStart)/1000;
+    if(el>=LEAD&&!G.mediaStarted&&!G.paused){G.mediaStarted=true;G.adapter.play(0)}
+    if(G.mediaStarted&&G.clock.isPlaying())G.phase='play';
+    else return G.startChart-LEAD+Math.min(el,LEAD)}
+  return G.clock.timeAt(p)-G.off-G.lat;
+}
+function register(res,lane,dt,tail){
+  if(res==='P')G.P++;else if(res==='G')G.Gd++;else G.M++;
+  if(res==='M')G.combo=0;else{G.combo++;if(G.combo>G.maxCombo)G.maxCombo=G.combo}
+  G.score=Math.round((G.P+G.Gd*0.5)*G.unitScore);
+  if(res!=='M')G.fx.push({lane,t:performance.now(),res});
+  showJudge(res,dt,tail);
+}
+function isDone(n){return n.j!=null&&(n.type==='tap'||n.tj!=null)}
+function updateJudge(t){
+  for(let l=0;l<4;l++){const arr=G.lanes[l];let p=G.ptr[l];while(p<arr.length&&isDone(arr[p]))p++;G.ptr[l]=p;
+    for(let i=p;i<arr.length;i++){const n=arr[i];if(n.t>t+0.2)break;
+      if(n.j==null&&t>n.t+WIN.M){n.j='M';register('M',l,null,false);if(n.type==='hold'){n.tj='M';register('M',l,null,true)}}
+      if(n.holding&&t>=n.end){n.holding=false;n.tj='P';register('P',l,0,true)}}}
+}
+function laneDown(l,p){if(!G||G.paused||G.phase==='done')return;G.down[l]=1;G.pressAt[l]=performance.now();const t=gTime(p),arr=G.lanes[l];
+  for(let i=G.ptr[l];i<arr.length;i++){const n=arr[i];if(n.j!=null)continue;const dt=t-n.t;if(dt<-WIN.M)break;
+    const a=Math.abs(dt),r=a<=WIN.P?'P':a<=WIN.G?'G':'M';n.j=r;register(r,l,dt,false);
+    if(n.type==='hold'){if(r==='M'){n.tj='M';register('M',l,null,true)}else n.holding=true}break}}
+function laneUp(l,p){if(!G)return;G.down[l]=0;if(G.paused||G.phase==='done')return;const t=gTime(p),arr=G.lanes[l];
+  for(let i=G.ptr[l];i<arr.length;i++){const n=arr[i];if(n.holding){n.holding=false;if(t>=n.end-HOLD_REL){n.tj='P';register('P',l,0,true)}else{n.tj='M';register('M',l,null,true)}break}if(n.t>t+1)break}}
+function onSeek(fromM,toM){if(!G||G.phase!=='play')return;const tNew=toM-G.off-G.lat;
+  if(toM>fromM){for(const n of G.notes){if(n.j==null&&n.t<tNew-WIN.M){n.j='M';if(n.type==='hold')n.tj='M'}if(n.holding&&n.end<tNew){n.holding=false;n.tj='M'}}}
+  else{for(const n of G.notes)if(n.end>=tNew-0.05||n.t>=tNew-0.05){n.j=null;n.tj=null;n.holding=false}}
+  G.P=G.Gd=G.M=0;for(const n of G.notes){for(const r of[n.j,n.type==='hold'?n.tj:null]){if(r==='P')G.P++;else if(r==='G')G.Gd++;else if(r==='M')G.M++}}
+  G.score=Math.round((G.P+G.Gd*0.5)*G.unitScore);G.combo=0;G.ptr=[0,0,0,0];toast('偵測到影片跳轉，已重新同步（Combo 歸零）')}
+function openPause(auto){if(!G||G.paused||G.phase!=='play')return;G.paused=true;if(!auto)G.adapter.pause();
+  for(let l=0;l<4;l++)G.down[l]=0;$('#pauseNote').textContent=auto?'影片已暫停':'按 Esc 或「繼續」回到遊戲';$('#pauseOv').classList.remove('hide')}
+function resumeGame(){if(!G||!G.paused||G.counting)return;$('#pauseOv').classList.add('hide');G.counting=true;let n=3;const hc=$('#hudCount');hc.classList.remove('hide');hc.textContent=n;
+  const iv=setInterval(()=>{n--;if(n>0){hc.textContent=n;return}clearInterval(iv);hc.classList.add('hide');G.counting=false;
+    for(const x of G.notes)if(x.holding&&!G.down[x.lane]){x.holding=false;x.tj='M';G.M++;G.combo=0}
+    G.adapter.play();G.paused=false;G.clock.frozen=true},600)}
+function quitGame(){if(G){G.adapter.stop();G.phase='done'}G=null;showScreen('setup');refreshPlayCard()}
+function finishGame(){G.phase='done';G.adapter.stop();
+  const total=G.P+G.Gd+G.M,acc=total?(G.P+G.Gd*0.5)/total:0,rank=acc>=0.95?'S':acc>=0.9?'A':acc>=0.8?'B':acc>=0.7?'C':'D';
+  const prev=store.get(bestKey(),null),isNew=!prev||G.score>prev.score;if(isNew)store.set(bestKey(),{score:G.score,rank,acc});
+  const rc={S:'#ffd166',A:'#3ef0ff',B:'#4d8bff',C:'#a86bff',D:'#ff6b7d'}[rank];
+  $('#rSong').textContent=S.title;$('#rDiff').textContent=G.cfg.en;$('#rDiff').style.setProperty('--k',G.cfg.color);
+  $('#rRank').textContent=rank;$('#rRank').style.setProperty('--k',rc);$('#rFC').textContent=G.M===0?(G.Gd===0?'ALL PERFECT':'FULL COMBO'):'';
+  $('#rScore').textContent=String(G.score).padStart(7,'0');$('#rNew').classList.toggle('hide',!isNew);
+  $('#rAcc').textContent=(acc*100).toFixed(2)+'%';$('#rCombo').textContent=G.maxCombo;$('#rP').textContent=G.P;$('#rG').textContent=G.Gd;$('#rM').textContent=G.M;
+  showScreen('result')}
+
+/* ---------------- HUD ---------------- */
+let judgeT=0;
+function showJudge(res,dt,tail){const el=$('#hudJudge');const map={P:['PERFECT','#ffd166'],G:['GOOD','#3ef0ff'],M:['MISS','#ff6b7d']};const[txt,col]=map[res];
+  let sub='';if(dt!=null&&res!=='P'&&!tail){sub=(dt<0?'EARLY ':'LATE ')+Math.round(Math.abs(dt)*1000)+'ms'}
+  el.innerHTML=txt+(sub?'<small>'+sub+'</small>':'');el.style.color=col;el.style.textShadow='0 0 20px '+col;el.className='';void el.offsetWidth;el.className='show'}
+let lastCombo=0;
+function updateHUD(t){
+  $('#hudScore').textContent=String(G.score).padStart(7,'0');
+  const tot=G.P+G.Gd+G.M;$('#hudAcc').textContent=(tot?((G.P+G.Gd*0.5)/tot*100):100).toFixed(2)+'%';
+  const hc=$('#hudCombo');hc.style.opacity=G.combo>=3?1:0;if(G.combo!==lastCombo){$('#hudComboN').textContent=G.combo;if(G.combo>lastCombo){hc.classList.remove('bump');void hc.offsetWidth;hc.classList.add('bump')}lastCombo=G.combo}
+  const dur=G.endT-2;$('#hudProg i').style.width=clamp(t/dur,0,1)*100+'%';
+}
+
+/* ---------------- 版面與透視投影 ---------------- */
+function layoutGame(){
+  const W=innerWidth,H=innerHeight;let top=0;
+  if(S.isYT){let ph=clamp(Math.round(H*0.42),220,Math.round(H*0.5)),pw=Math.round(ph*16/9);if(pw>W-16){pw=W-16;ph=Math.max(220,Math.round(pw*9/16))}
+    const w=$('#ytWrap').style;w.left=Math.round((W-pw)/2)+'px';w.top='0px';w.width=pw+'px';w.height=ph+'px';top=ph}
+  const h=H-top,dpr=Math.min(2,devicePixelRatio||1);
+  cv.style.top=top+'px';cv.style.width=W+'px';cv.style.height=h+'px';cv.width=Math.round(W*dpr);cv.height=Math.round(h*dpr);cx.setTransform(dpr,0,0,dpr,0,0);
+  const st=$('#stage').style;st.top=top+'px';
+  L={w:W,h,top,cx:W/2,sFar:S.isYT?0.42:0.28,yt:S.isYT};
+  L.judgeY=h*(S.isYT?0.82:0.85);L.horizonY=S.isYT?0:h*0.07;
+  L.bw=Math.min(W*0.62,h*(S.isYT?1.1:0.85),760);L.k=1/L.sFar-1;
+  L.dpx=(L.judgeY-L.horizonY)*L.k/(1-L.sFar);
+  {const sB=L.sFar+(h+12-L.horizonY)/(L.judgeY-L.horizonY)*(1-L.sFar);L.dB=Math.max(-0.9/L.k,(1/sB-1)/L.k)}
+  L.px=v=>v/L.dpx;
+  const cy=proj(0.5).y;$('#hudCombo').style.top=(cy-45)+'px';$('#hudJudge').style.top=(L.judgeY-proj(0.22).y>60?proj(0.2).y:L.judgeY-80)+'px';
+}
+function proj(d){const s=1/(1+d*L.k);return{y:L.horizonY+(L.judgeY-L.horizonY)*(s-L.sFar)/(1-L.sFar),hw:L.bw*s/2,s}}
+function LX(lane,f,p){return L.cx-p.hw+(lane+f)*p.hw/2}
+function laneQuad(lane,dN,dF,inset){const a=proj(dN),b=proj(dF);cx.beginPath();cx.moveTo(LX(lane,inset,a),a.y);cx.lineTo(LX(lane,1-inset,a),a.y);cx.lineTo(LX(lane,1-inset,b),b.y);cx.lineTo(LX(lane,inset,b),b.y);cx.closePath()}
+function rgba(c,a){return`rgba(${c[0]},${c[1]},${c[2]},${a})`}
+function energyAt(t){const an=G.an;if(!an.energy)return 0.5;const i=Math.round((t-an.off)*an.fps);return an.energy[clamp(i,0,an.energy.length-1)]||0}
+function beatPulse(t){const b=G.an.beats;if(!b.length)return 0;const i=lowerBound(b,t+0.0001)-1;if(i<0)return 0;const dt=t-b[i];return Math.exp(-dt*7)*(i%4===0?1:0.6)}
+
+function render(t,now){
+  const w=L.w,h=L.h;cx.clearRect(0,0,w,h);
+  const en=energyAt(t),pulse=beatPulse(t),look=G.look;
+  const vp=L.horizonY-(L.judgeY-L.horizonY)*L.sFar/(1-L.sFar);
+  // 背景
+  if(S.mode!=='video'){
+    const bg=cx.createLinearGradient(0,0,0,h);bg.addColorStop(0,'#05060c');bg.addColorStop(1,'#0a0d1c');cx.fillStyle=bg;cx.fillRect(0,0,w,h);
+    const rg=cx.createRadialGradient(L.cx,L.horizonY,0,L.cx,L.horizonY,w*0.6);rg.addColorStop(0,`rgba(110,110,255,${0.16+en*0.14+pulse*0.08})`);rg.addColorStop(0.5,`rgba(168,107,255,${0.05+en*0.05})`);rg.addColorStop(1,'rgba(0,0,0,0)');cx.fillStyle=rg;cx.fillRect(0,0,w,h);
+    // 地面網格
+    cx.save();cx.beginPath();cx.rect(0,L.horizonY,w,h);cx.clip();
+    cx.strokeStyle=`rgba(77,139,255,${0.07+pulse*0.06})`;cx.lineWidth=1;
+    for(let i=-14;i<=14;i++){const xb=L.cx+i*L.bw*0.35;cx.beginPath();cx.moveTo(L.cx+(xb-L.cx)*0.02,vp+(L.horizonY-vp)*0.98);cx.lineTo(L.cx+(xb-L.cx)*3,h+(h-vp)*2);cx.stroke()}
+    for(const b of G.an.beats){const d=(b-t)/look;if(d<L.dB)continue;if(d>1.05)break;const p=proj(d);cx.strokeStyle=`rgba(62,240,255,${0.05*(1-Math.min(1,d))+0.02})`;cx.beginPath();cx.moveTo(0,p.y);cx.lineTo(w,p.y);cx.stroke()}
+    cx.restore();
+    if(L.yt){cx.save();cx.translate(L.cx,0);cx.scale(1,0.22);const tg=cx.createRadialGradient(0,0,0,0,0,L.bw*0.75);tg.addColorStop(0,`rgba(62,240,255,${0.22+pulse*0.1})`);tg.addColorStop(0.5,'rgba(120,107,255,.08)');tg.addColorStop(1,'rgba(62,240,255,0)');cx.fillStyle=tg;cx.fillRect(-L.bw,0,L.bw*2,L.bw*0.8);cx.restore()}
+  }
+  // 軌道
+  const dB=L.dB,pF=proj(1),pB=proj(dB);
+  cx.beginPath();cx.moveTo(L.cx-pF.hw,pF.y);cx.lineTo(L.cx+pF.hw,pF.y);cx.lineTo(L.cx+pB.hw,pB.y);cx.lineTo(L.cx-pB.hw,pB.y);cx.closePath();
+  const tg=cx.createLinearGradient(0,pF.y,0,L.judgeY);tg.addColorStop(0,'rgba(12,16,34,0.25)');tg.addColorStop(1,S.mode==='video'?'rgba(6,8,18,0.78)':'rgba(10,13,28,0.88)');cx.fillStyle=tg;cx.fill();
+  // 拍線
+  for(let i=0;i<G.an.beats.length;i++){const b=G.an.beats[i],d=(b-t)/look;if(d<0)continue;if(d>1)break;const p=proj(d);
+    cx.strokeStyle=`rgba(160,190,255,${(i%4===0?0.16:0.07)*(1-d*0.6)})`;cx.lineWidth=i%4===0?1.5:1;cx.beginPath();cx.moveTo(L.cx-p.hw,p.y);cx.lineTo(L.cx+p.hw,p.y);cx.stroke()}
+  // 按壓光柱
+  for(let l=0;l<4;l++){const held=G.down[l],fade=held?1:clamp(1-(now-G.pressAt[l])/180,0,1);if(fade<=0)continue;
+    laneQuad(l,0,0.5,0.02);const a=proj(0),b=proj(0.5),g=cx.createLinearGradient(0,a.y,0,b.y);g.addColorStop(0,rgba(LANE_RGB[l],0.32*fade));g.addColorStop(1,rgba(LANE_RGB[l],0));cx.fillStyle=g;cx.fill()}
+  // 分隔線與邊緣
+  for(let i=0;i<=4;i++){const xf=L.cx+(i-2)*pF.hw/2,xb=L.cx+(i-2)*pB.hw/2,edge=i===0||i===4;
+    const g=cx.createLinearGradient(0,pF.y,0,pB.y);g.addColorStop(0,'rgba(140,170,255,0)');g.addColorStop(0.5,edge?'rgba(140,200,255,.55)':'rgba(140,170,255,.14)');g.addColorStop(1,edge?'rgba(140,200,255,.8)':'rgba(140,170,255,.22)');
+    cx.strokeStyle=g;cx.lineWidth=edge?2:1;cx.beginPath();cx.moveTo(xf,pF.y);cx.lineTo(xb,pB.y);cx.stroke();
+    if(edge){cx.strokeStyle=i===0?'rgba(62,240,255,.12)':'rgba(255,92,207,.12)';cx.lineWidth=8;cx.beginPath();cx.moveTo(xf,pF.y);cx.lineTo(xb,pB.y);cx.stroke()}}
+  // 判定線與按鍵
+  const pj=proj(0);
+  cx.fillStyle=`rgba(255,255,255,${0.06+pulse*0.05})`;cx.fillRect(L.cx-pj.hw,L.judgeY-8,pj.hw*2,16);
+  const jg=cx.createLinearGradient(L.cx-pj.hw,0,L.cx+pj.hw,0);jg.addColorStop(0,'#3ef0ff');jg.addColorStop(0.35,'#4d8bff');jg.addColorStop(0.65,'#a86bff');jg.addColorStop(1,'#ff5ccf');
+  cx.fillStyle=jg;cx.fillRect(L.cx-pj.hw,L.judgeY-1.5,pj.hw*2,3);
+  for(let l=0;l<4;l++){laneQuad(l,L.px(-10),L.px(10),0.07);cx.fillStyle=rgba(LANE_RGB[l],G.down[l]?0.55:0.1);cx.fill();cx.strokeStyle=rgba(LANE_RGB[l],G.down[l]?0.95:0.35);cx.lineWidth=1.5;cx.stroke();
+    const pk=proj(L.px(-34));cx.fillStyle=G.down[l]?'#fff':'rgba(200,210,240,.45)';cx.font=`700 ${Math.round(clamp(pk.hw/9,11,18))}px Orbitron,sans-serif`;cx.textAlign='center';cx.textBaseline='middle';cx.fillText(KEY_LABELS[l],LX(l,0.5,pk),pk.y)}
+  // 音符
+  const tMin=t+L.dB*look,tMax=t+look*1.05,vis=[];
+  let i0=lowerBound(G.notes.map?G.noteT||(G.noteT=G.notes.map(n=>n.t)):[],tMin-6);
+  for(let i=i0;i<G.notes.length;i++){const n=G.notes[i];if(n.t>tMax)break;if(n.end<tMin)continue;vis.push(n)}
+  for(let k=vis.length-1;k>=0;k--)drawNote(vis[k],t,look,now);
+  // 擊中效果
+  G.fx=G.fx.filter(f=>now-f.t<320);
+  for(const f of G.fx){const a=(now-f.t)/320,p=proj(0),x=LX(f.lane,0.5,p),r=p.hw/4*(0.4+a*0.9),col=f.res==='P'?[255,209,102]:LANE_RGB[f.lane];
+    cx.strokeStyle=rgba(col,(1-a)*0.9);cx.lineWidth=3*(1-a)+1;cx.beginPath();cx.ellipse(x,L.judgeY,r,r*0.32,0,0,Math.PI*2);cx.stroke();
+    for(let s=0;s<6;s++){const ang=-Math.PI*(0.15+0.7*s/5),len=r*0.9;cx.strokeStyle=rgba(col,(1-a)*0.7);cx.lineWidth=2;cx.beginPath();cx.moveTo(x+Math.cos(ang)*len*0.6,L.judgeY+Math.sin(ang)*len*0.6);cx.lineTo(x+Math.cos(ang)*len*1.3,L.judgeY+Math.sin(ang)*len*1.3);cx.stroke()}}
+  // 長按中的光芒
+  for(const n of vis)if(n.holding){const p=proj(0),x=LX(n.lane,0.5,p),r=p.hw/4*(0.7+Math.random()*0.25),g=cx.createRadialGradient(x,L.judgeY,0,x,L.judgeY,r);
+    g.addColorStop(0,rgba(LANE_RGB[n.lane],0.55));g.addColorStop(1,rgba(LANE_RGB[n.lane],0));cx.fillStyle=g;cx.fillRect(x-r,L.judgeY-r,r*2,r*2)}
+}
+function alphaAt(d){return d<=0?1:(0.35+0.65*Math.pow(1-Math.min(1,d),1.2))*clamp((1.05-d)/0.12,0,1)}
+function drawNote(n,t,look,now){
+  const col=LANE_RGB[n.lane],grey=[120,128,150];
+  if(n.type==='tap'){if(n.j&&n.j!=='M')return;const d=(n.t-t)/look;if(d>1.05||d<L.dB)return;
+    const miss=n.j==='M',c=miss?grey:col,a=alphaAt(d)*(miss?0.5:1),th=L.px(26),gp=L.px(5);
+    laneQuad(n.lane,d-gp,d+th+gp,0.03);cx.fillStyle=rgba(c,a*0.25);cx.fill();
+    laneQuad(n.lane,d,d+th,0.07);const p1=proj(d),p2=proj(d+th),g=cx.createLinearGradient(0,p1.y,0,p2.y);g.addColorStop(0,rgba([255,255,255],a));g.addColorStop(0.35,rgba(c,a));g.addColorStop(1,rgba(c,a*0.75));cx.fillStyle=g;cx.fill();
+    return}
+  // 長按
+  if(n.tj==='P')return;
+  const dh=(n.t-t)/look,de=(n.end-t)/look;if(de<L.dB||dh>1.05)return;
+  const dead=n.j==='M'||n.tj==='M',c=dead?grey:col,headD=n.holding?0:dh,near=Math.max(headD,L.dB),far=Math.min(de,1.05);
+  if(far>near){laneQuad(n.lane,near,far,0.2);const a=proj(near),b=proj(far),g=cx.createLinearGradient(0,a.y,0,b.y);
+    const na=(n.holding?0.85:0.55)*alphaAt(near)*(dead?0.5:1);g.addColorStop(0,rgba(c,na));g.addColorStop(1,rgba(c,0.12*(dead?0.5:1)));cx.fillStyle=g;cx.fill();
+    if(n.holding){laneQuad(n.lane,near,far,0.42);const g2=cx.createLinearGradient(0,a.y,0,b.y);g2.addColorStop(0,'rgba(255,255,255,.55)');g2.addColorStop(1,'rgba(255,255,255,0)');cx.fillStyle=g2;cx.fill()}}
+  if(de<=1.05&&de>=L.dB){laneQuad(n.lane,de,de+L.px(6),0.16);cx.fillStyle=rgba(c,0.6*alphaAt(de)*(dead?0.5:1));cx.fill()}
+  if(headD<=1.05&&headD>=L.dB){const a=alphaAt(headD)*(dead?0.5:1),th=L.px(28),gp=L.px(6);
+    laneQuad(n.lane,headD-gp,headD+th+gp,0.02);cx.fillStyle=rgba(c,a*(n.holding?0.45+0.2*Math.sin(now/60):0.25));cx.fill();
+    laneQuad(n.lane,headD,headD+th,0.06);const p1=proj(headD),p2=proj(headD+th),g=cx.createLinearGradient(0,p1.y,0,p2.y);g.addColorStop(0,rgba([255,255,255],a));g.addColorStop(0.3,rgba(c,a));g.addColorStop(1,rgba(c,a*0.8));cx.fillStyle=g;cx.fill();
+    laneQuad(n.lane,headD+th*0.35,headD+th*0.65,0.3);cx.fillStyle=rgba([255,255,255],a*0.7);cx.fill()}
+}
+
+/* ---------------- 主迴圈 ---------------- */
+function gameFrame(now){
+  G.clock.update();
+  const t=gTime(now);
+  if(!G.paused&&G.phase!=='done')updateJudge(t);
+  if(S.isYT&&G.phase==='play'){let st=-1;try{st=ytPlayer.getPlayerState()}catch(e){}
+    const msg=$('#hudMsg');
+    if(!G.paused&&st===2)openPause(true);
+    if(G.paused&&!G.counting&&st===1&&!ytAdLikely()){$('#pauseOv').classList.add('hide');G.paused=false}
+    const m=st===3?'影片緩衝中…':(ytAdLikely()?'廣告播放中，結束後自動開始':(document.activeElement&&document.activeElement.tagName==='IFRAME'?'鍵盤焦點在 YouTube 播放器上<br>請點一下遊戲區域恢復 D F J K 操作':''));
+    if(m){msg.innerHTML=m;msg.classList.remove('hide')}else msg.classList.add('hide')}
+  if(G.phase==='play'&&!G.paused&&(t>G.endT||G.adapter.ended())){finishGame();return}
+  render(t,now);updateHUD(t);
+}
+function frame(now){
+  requestAnimationFrame(frame);
+  try{
+    if(screen==='setup'){placeYTSlot();if(setupClock)setupClock.update();metroTick()}
+    if(screen==='game'&&G)gameFrame(now);
+  }catch(e){console.error(e)}
+}
+requestAnimationFrame(frame);
+
+/* ---------------- 延遲校正 ---------------- */
+const calib={active:false,clicks:[],taps:[]};
+function startCalib(){const c=AC(),B=0.6,t0=c.currentTime+0.6;calib.active=true;calib.taps=[];calib.clicks=[];
+  $('#calibViz').querySelectorAll('i').forEach(e=>e.remove());
+  for(let i=0;i<24;i++){const t=t0+i*B;click(t,i<4?1760:1046,0.3);if(i>=4)calib.clicks.push(t)}
+  $('#calibMsg').textContent='預備 4 拍…之後跟著聲音按 Space';$('#btnCalib').disabled=true;
+  setTimeout(()=>{if(calib.active)$('#calibMsg').textContent='開始按！'},2400+600);
+  setTimeout(endCalib,(0.6+24*B+0.5)*1000)}
+function calibTap(e){const ct=ctxTimeAt(evTime(e));let best=null;for(const c of calib.clicks){const d=ct-c;if(Math.abs(d)<0.3&&(!best||Math.abs(d)<Math.abs(best)))best=d}
+  if(best==null)return;calib.taps.push(best);const dot=document.createElement('i');dot.style.left=clamp(50+best*1000/4,2,98)+'%';$('#calibViz').appendChild(dot);
+  $('#calibMsg').textContent='已記錄 '+calib.taps.length+' 次'}
+function endCalib(){calib.active=false;$('#btnCalib').disabled=false;const tp=calib.taps.slice(-12);
+  if(tp.length<8){$('#calibMsg').textContent='有效按鍵太少（'+tp.length+' 次），請再試一次。';return}
+  tp.sort((a,b)=>a-b);const ms=Math.round(tp[tp.length>>1]*1000);settings.latency=clamp(ms,-200,300);saveSettings();syncSettingsUI();
+  $('#calibMsg').innerHTML='校正完成：延遲補償設為 <b class="ok">'+settings.latency+' ms</b>'}
+function syncSettingsUI(){$('#spd').value=settings.speed;$('#spdVal').textContent=settings.speed.toFixed(1)+'×';$('#lat').value=settings.latency;$('#latVal').textContent=settings.latency+' ms'}
+$('#spd').oninput=e=>{settings.speed=+e.target.value;saveSettings();syncSettingsUI()};
+$('#lat').oninput=e=>{settings.latency=+e.target.value;saveSettings();syncSettingsUI()};
+$('#btnCalib').onclick=()=>startCalib();
+$('#btnCloseSettings').onclick=()=>{$('#settings').classList.remove('open');calib.active=false;$('#btnCalib').disabled=false};
+document.querySelectorAll('[data-open-settings]').forEach(b=>b.onclick=()=>{syncSettingsUI();$('#settings').classList.add('open')});
+syncSettingsUI();
+
+/* ---------------- 事件 ---------------- */
+document.querySelectorAll('.mode').forEach(b=>b.onclick=()=>{AC();enterMode(b.dataset.mode)});
+$('#btnBack').onclick=()=>{stopPreviews();if(S.isYT&&ytPlayer){try{ytPlayer.pauseVideo()}catch(e){}}showScreen('home')};
+$('#btnStart').onclick=()=>startGame();
+$('#btnResume').onclick=()=>resumeGame();
+$('#btnRestart').onclick=()=>{$('#pauseOv').classList.add('hide');startGame()};
+$('#btnQuit').onclick=()=>quitGame();
+$('#btnRetry').onclick=()=>startGame();
+$('#btnChangeDiff').onclick=()=>{showScreen('setup');refreshPlayCard()};
+$('#btnChangeSong').onclick=()=>{G=null;showScreen('home')};
+$('#stage').addEventListener('mousedown',()=>{if(document.activeElement&&document.activeElement.tagName==='IFRAME')document.activeElement.blur();window.focus()});
+function isTyping(e){const t=e.target;return t&&(t.tagName==='INPUT'&&t.type!=='range'||t.tagName==='TEXTAREA')}
+addEventListener('keydown',e=>{
+  const l=KEYS[e.code];
+  if(calib.active&&(e.code==='Space'||l!=null)){e.preventDefault();if(!e.repeat)calibTap(e);return}
+  if(screen==='game'&&G){
+    if(l!=null){e.preventDefault();if(!e.repeat)laneDown(l,evTime(e));return}
+    if(e.code==='Escape'){e.preventDefault();if(G.paused)resumeGame();else openPause(false);return}
+    if(e.code==='Space')e.preventDefault();return}
+  if(isTyping(e))return;
+  if(screen==='setup'&&S.isYT){if(e.code==='KeyB'){e.preventDefault();markB(e)}else if(e.code==='KeyT'){e.preventDefault();tapTempo(e)}}
+  if(screen==='result'&&e.code==='Enter')startGame();
+  if(e.code==='Escape'&&$('#settings').classList.contains('open'))$('#btnCloseSettings').click();
+});
+addEventListener('keyup',e=>{const l=KEYS[e.code];if(l!=null&&screen==='game'&&G){e.preventDefault();laneUp(l,evTime(e))}});
+addEventListener('blur',()=>{if(screen==='game'&&G)for(let l=0;l<4;l++)if(G.down[l])laneUp(l,performance.now())});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&G&&screen==='game'&&G.phase==='play'&&!G.paused)openPause(false)});
+addEventListener('resize',()=>{if(screen==='game'&&G)layoutGame();if(screen==='setup')drawMini()});
+
+/* 測試用介面（不影響遊玩） */
+window.__RL={S,get G(){return G},settings,generateChart,analyzeBuffer,synthDemo,gridAnalysis};
+</script>
+</body>
+</html>
