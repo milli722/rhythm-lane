@@ -185,6 +185,19 @@ body.playing .backdrop{display:none}
 #calibMsg{font-size:13px;color:var(--text);min-height:20px;margin-top:18px}
 .panel .primary{width:100%}
 
+.bgm{position:fixed;right:28px;top:78px;z-index:5;width:356px;border-radius:14px;overflow:hidden;background:rgba(10,13,24,.92);border:1px solid var(--line2);backdrop-filter:blur(12px);box-shadow:0 16px 50px rgba(0,0,0,.5)}
+.bgm-head{display:flex;align-items:center;gap:10px;padding:10px 12px}
+.bgm-t{flex:1;min-width:0}.bgm-t small{display:block;font-size:10px;letter-spacing:.16em;color:var(--dim)}
+.bgm-t b{display:block;font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bgm-head button{width:28px;height:28px;border-radius:8px;color:var(--muted);border:1px solid var(--line)}.bgm-head button:hover{color:var(--text);border-color:var(--line2)}
+.bgm-eq{display:flex;align-items:flex-end;gap:2px;height:16px}.bgm-eq i{width:3px;height:30%;border-radius:2px;background:var(--c0)}
+.bgm.on .bgm-eq i{animation:eq .9s ease-in-out infinite}.bgm.on .bgm-eq i:nth-child(2){animation-delay:-.3s;background:var(--c2)}.bgm.on .bgm-eq i:nth-child(3){animation-delay:-.6s;background:var(--c3)}
+@keyframes eq{0%,100%{height:25%}50%{height:100%}}
+.bgm-player{width:356px;height:200px;background:#000}.bgm-player iframe,#bgmPlayer{width:100%;height:100%;display:block;border:0}
+.bgm-tip{padding:8px 12px;font-size:12px;color:var(--c0);text-align:center}
+.bgm-pill{position:fixed;right:28px;top:78px;z-index:5;padding:10px 16px;border-radius:999px;border:1px solid var(--line2);background:rgba(10,13,24,.9);color:var(--muted);font-size:13px}
+.bgm-pill:hover{color:var(--text);border-color:var(--c0)}
+@media (max-width:1320px){.bgm,.bgm-pill{top:auto;bottom:20px;right:20px}.home{padding-bottom:280px}}
 #toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,20px);z-index:30;padding:12px 20px;border-radius:12px;background:rgba(12,16,30,.95);border:1px solid var(--line2);font-size:14px;opacity:0;pointer-events:none;transition:.25s;max-width:min(560px,90vw);text-align:center;line-height:1.6}
 #toast.show{opacity:1;transform:translate(-50%,0)}
 
@@ -207,6 +220,12 @@ body.playing .backdrop{display:none}
 <div id="bgShade"></div>
 <canvas id="cv"></canvas>
 <div id="ytWrap"><div id="ytPlayer"></div></div>
+<div id="bgm" class="bgm hide">
+  <div class="bgm-head"><span class="bgm-eq"><i></i><i></i><i></i></span><div class="bgm-t"><small>背景音樂</small><b>XG - HYPNOTIZE (Instrumental)</b></div><button id="bgmHide" title="收起並暫停">—</button></div>
+  <div class="bgm-player"><div id="bgmPlayer"></div></div>
+  <div class="bgm-tip" id="bgmTip">點擊頁面任意處開始播放</div>
+</div>
+<button id="bgmPill" class="bgm-pill hide">♪ 背景音樂</button>
 
 <!-- HOME -->
 <section id="home" class="screen active">
@@ -700,6 +719,7 @@ function showScreen(id){screen=id;document.querySelectorAll('.screen').forEach(s
   const yw=$('#ytWrap');yw.classList.toggle('game',id==='game');
   if(S.isYT&&ytPlayer&&(id==='setup'||id==='game'))showYT(true);else if(ytShown)showYT(false);
   if(id==='setup')requestAnimationFrame(()=>{placeYTSlot();drawMini()});
+  bgmSync();
 }
 const MODE_NAMES={demo:'示範曲',video:'本機影片',audio:'本機音樂',ytq:'YouTube 快速模式',yta:'YouTube 進階模式'};
 
@@ -1128,8 +1148,34 @@ addEventListener('blur',()=>{if(screen==='game'&&G)for(let l=0;l<4;l++)if(G.down
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&G&&screen==='game'&&G.phase==='play'&&!G.paused)openPause(false)});
 addEventListener('resize',()=>{if(screen==='game'&&G)layoutGame();if(screen==='setup')drawMini()});
 
+/* ---------------- 首頁背景音樂（可見的 YouTube 播放器，符合嵌入規範） ---------------- */
+const BGM_ID='c73-fDYGjRs';
+let bgmPlayer=null,bgmReady=false,bgmBroken=false,bgmGesture=false,bgmWant=store.get('rl_bgm',true);
+function bgmActive(){return(screen==='home'||screen==='result')&&!document.hidden}
+function bgmSync(){
+  const show=(screen==='home'||screen==='result')&&!bgmBroken;
+  $('#bgm').classList.toggle('hide',!(show&&bgmWant));$('#bgmPill').classList.toggle('hide',!(show&&!bgmWant));
+  if(!bgmReady)return;
+  try{if(bgmActive()&&bgmWant&&bgmGesture)bgmPlayer.playVideo();else bgmPlayer.pauseVideo()}catch(e){}
+}
+function bgmInit(){
+  loadYTApi().then(()=>{
+    const pv={playsinline:1,rel:0,loop:1,playlist:BGM_ID,controls:1,iv_load_policy:3};if(location.protocol.startsWith('http'))pv.origin=location.origin;
+    bgmPlayer=new YT.Player('bgmPlayer',{videoId:BGM_ID,width:'100%',height:'100%',playerVars:pv,events:{
+      onReady:()=>{bgmReady=true;try{bgmPlayer.setVolume(45)}catch(e){}bgmSync()},
+      onStateChange:e=>{const on=e.data===1;$('#bgm').classList.toggle('on',on);if(on)$('#bgmTip').classList.add('hide')},
+      onError:()=>{bgmBroken=true;bgmSync()}}});
+  }).catch(()=>{bgmBroken=true;bgmSync()});
+}
+function bgmFirstGesture(){if(bgmGesture)return;bgmGesture=true;removeEventListener('pointerdown',bgmFirstGesture,true);removeEventListener('keydown',bgmFirstGesture,true);bgmSync()}
+addEventListener('pointerdown',bgmFirstGesture,true);addEventListener('keydown',bgmFirstGesture,true);
+$('#bgmHide').onclick=()=>{bgmWant=false;store.set('rl_bgm',false);bgmSync()};
+$('#bgmPill').onclick=()=>{bgmWant=true;bgmGesture=true;store.set('rl_bgm',true);bgmSync()};
+document.addEventListener('visibilitychange',()=>bgmSync());
+bgmSync();bgmInit();
+
 /* 測試用介面（不影響遊玩） */
-window.__RL={S,get G(){return G},settings,generateChart,analyzeBuffer,synthDemo,gridAnalysis};
+window.__RL={get bgm(){return{bgmPlayer,bgmReady,bgmGesture,bgmWant}},S,get G(){return G},settings,generateChart,analyzeBuffer,synthDemo,gridAnalysis};
 </script>
 </body>
 </html>
